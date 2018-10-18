@@ -2342,29 +2342,6 @@ function scriptSource(invokeBy) {
         }
     }())
 
-    const balh_jump_to_baipiao = (function () {
-        function main() {
-            for (let bp of r.baipiao) {
-                const cookie_key = `balh_baipao_${bp.key}`
-                if (bp.match() && !util_cookie[cookie_key]) {
-                    util_ui_pop({
-                        content: [
-                            _('text', '发现白嫖地址: '), _('a', { href: bp.link }, bp.link),
-                            _('div', {}, bp.message),
-                        ],
-                        confirmBtn: '一键跳转',
-                        onConfirm: () => { location.href = bp.link },
-                        onClose: () => { util_cookie.set(cookie_key, r.const.TRUE, '') }
-                    })
-                    break
-                }
-            }
-        }
-        util_init(() => {
-            main()
-        }, util_init.PRIORITY.DEFAULT, util_init.RUN_AT.DOM_LOADED_AFTER)
-    }())
-
     function main() {
         util_log(
             'mode:', balh_config.mode,
