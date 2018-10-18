@@ -7,17 +7,17 @@
 // @supportURL   https://github.com/zwjhuhu/TMUserScripts/issues
 // @compatible   chrome
 // @license      MIT
-// @require      https://www.bilitest.com/dom_gen.js?3
-// @require      https://www.bilitest.com/resizeSensor.js
-// @require      https://www.bilitest.com/rc4.js
-// @require      https://www.bilitest.com/md5.js
-// @require      https://www.bilitest.com/x2js.min.js
-// @require      https://www.bilitest.com/flv.js?4
-// @require      https://www.bilitest.com/jquery-3.3.1.min.js
-// @require      https://www.bilitest.com/google-style-loading.js
-// @require      https://www.bilitest.com/CommentCoreLibrary.js
-// @require      https://www.bilitest.com/biliplus_shield.js
-// @require      https://www.bilitest.com/ABPlayer.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/dom_gen.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/resizeSensor.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/rc4.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/md5.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/x2js.min.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/flv.min.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/jquery-3.3.1.min.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/google-style-loading.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/CommentCoreLibrary.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/biliplus_shield.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/ABPlayer.js
 // @match        http://*.acfun.cn/v/ac*
 // @match        http://*.acfun.cn/bangumi/*
 // @run-at       document-end
@@ -41,7 +41,7 @@
                 headers['Cache-Control'] = options.cache;
             }
             if(options.referrer){
-               headers['Referer'] = options.referrer;
+                headers['Referer'] = options.referrer;
             }
             if(headers['Referer']&&options.referrerPolicy && options.referrerPolicy ==='no-referrer'){
                 delete headers['Referer'];
@@ -59,7 +59,6 @@
                 e.json = function(){
                     return new Promise(function(res,rej){
                         try{
-                            console.log(e);
                             res(JSON.parse(e.responseText));
                         }catch(e){
                             rej(e);
@@ -432,18 +431,22 @@
     };
     let flvparam = function (select) {
         currentSrc = select;
-        createPlayer({ detail: { src: srcUrl[select],
-                                option: { seekType: 'range',
-                                         reuseRedirectedURL: false,
-                                         fixAudioTimestampGap: false,
-                                         customLoader:true,
-                                         tmfunc:GM_xmlhttpRequest,
-                                         headers:{
-                                             'Referer':window.location.href,
-                                             'User-Agent':window.navigator.userAgent
-                                         }
-                                        }
-                               } });
+        createPlayer({
+            detail: {
+                src: srcUrl[select],
+                option: {
+                    seekType: 'range',
+                    reuseRedirectedURL: true,
+                    fixAudioTimestampGap: false,
+                    customLoader:true,
+                    tmfunc:GM_xmlhttpRequest,
+                    headers:{
+                        'Referer':window.location.href,
+                        'User-Agent':window.navigator.userAgent
+                    }
+                }
+            }
+        });
         if (srcUrl[select].partial) {
             setTimeout(function () { abpinst.createPopup(_t('partialAvailable'), 3e3); }, 4e3);
         }
@@ -530,21 +533,20 @@
         }
         dest.remove();
         let blob = new Blob(['<!DOCTYPE HTML><html><head><meta charset="UTF-8"><style>html,body{height:100%;width:100%;margin:0;padding:0}</style><link rel="stylesheet" type="text/css" href="'
-                             + 'https://www.bilitest.com/ABPlayer.css'
+                             + ''
                              + '"></head><body></body></html>'], { type: 'text/html' });
         let bloburl = URL.createObjectURL(blob);
         window.playerIframe = container.appendChild(_('iframe', { className: 'AHP-Player-Container', src: bloburl, allow: 'fullscreen; autoplay' }));
         playerIframe.onload = function () {
             URL.revokeObjectURL(bloburl);
-            try {
-                if (playerIframe.contentDocument.head.getElementsByTagName('link').length == 0) {
-                    location.reload();
-                    return;
-                }
-            } catch (e) {
-                location.reload();
-                return;
-            }
+            fetch('https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/ABPlayer.css', {
+                method: 'GET',
+                referrerPolicy: 'no-referrer',
+                cache: 'no-cache'
+            }).then(function (r) {
+                playerIframe.contentDocument.head.appendChild(_('style', {type: 'text/css'},[_('text',r.responseText)]));
+            });
+
             let video = playerIframe.contentDocument.body.appendChild(_('video', { poster: pageInfo.coverImage }));
             window.flvplayer = { unload: function () { }, destroy: function () { } };
             abpinst = ABP.create(video.parentNode, {
