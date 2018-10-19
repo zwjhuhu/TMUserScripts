@@ -25,49 +25,53 @@
 // @connect      *
 // ==/UserScript==
 
-(function (){
+(function() {
 
     //保存原来的fetch,因为有跨域的问题所有fetch转换为GM_xmlhttpRequest
     let orginFetch = window.fetch;
-    let fetch = function(url,options){
-        if(!url){
-            return ;
+    let fetch = function(url, options) {
+        if (!url) {
+            return;
         }
-        let detail = {url:url};
-        if(options){
+        let detail = {
+            url: url
+        };
+        if (options) {
             detail.method = options.method;
-            let headers = {'User-Agent':window.navigator.userAgent};
-            if(options.cache){
+            let headers = {
+                'User-Agent': window.navigator.userAgent
+            };
+            if (options.cache) {
                 headers['Cache-Control'] = options.cache;
             }
-            if(options.referrer){
+            if (options.referrer) {
                 headers['Referer'] = options.referrer;
             }
-            if(headers['Referer']&&options.referrerPolicy && options.referrerPolicy ==='no-referrer'){
+            if (headers['Referer'] && options.referrerPolicy && options.referrerPolicy === 'no-referrer') {
                 delete headers['Referer'];
             }
-            if(options.credentials&&options.credentials==='include'){
+            if (options.credentials && options.credentials === 'include') {
                 detail.anonymous = false;
             }
-            if(options.headers){
-                Object.assign(headers,options.headers);
+            if (options.headers) {
+                Object.assign(headers, options.headers);
             }
             detail.headers = headers;
         }
-        return new Promise(function(resolve,reject){
-            detail.onload = function(e){
-                e.json = function(){
-                    return new Promise(function(res,rej){
-                        try{
+        return new Promise(function(resolve, reject) {
+            detail.onload = function(e) {
+                e.json = function() {
+                    return new Promise(function(res, rej) {
+                        try {
                             res(JSON.parse(e.responseText));
-                        }catch(e){
+                        } catch (e) {
                             rej(e);
                         }
                     });
                 }
                 resolve(e);
             }
-            detail.onerror = function(e){
+            detail.onerror = function(e) {
                 reject(e);
             }
             GM_xmlhttpRequest(detail);
@@ -80,22 +84,40 @@
         if (document.querySelector('#AHP_Notice') != null)
             document.querySelector('#AHP_Notice').remove();
 
-        let div = _('div', { id: 'AHP_Notice' });
+        let div = _('div', {
+            id: 'AHP_Notice'
+        });
         let childs = [];
         if (param.showConfirm) {
-            childs.push(_('input', { value: param.confirmBtn, type: 'button', className: 'confirm', event: { click: param.onConfirm } }));
+            childs.push(_('input', {
+                value: param.confirmBtn,
+                type: 'button',
+                className: 'confirm',
+                event: {
+                    click: param.onConfirm
+                }
+            }));
         }
         childs.push(_('input', {
-            value: _t('close'), type: 'button', className: 'close', event: {
-                click: function () {
+            value: _t('close'),
+            type: 'button',
+            className: 'close',
+            event: {
+                click: function() {
                     div.style.height = 0;
-                    setTimeout(function () { div.remove(); }, 500);
+                    setTimeout(function() {
+                        div.remove();
+                    }, 500);
                 }
             }
         }));
         div.appendChild(_('div', {}, [_('div', {},
-                                        param.content.concat([_('hr'), _('div', { style: { textAlign: 'right' } }, childs)])
-                                       )]));
+            param.content.concat([_('hr'), _('div', {
+                style: {
+                    textAlign: 'right'
+                }
+            }, childs)])
+        )]));
         document.body.appendChild(div);
         div.style.height = div.firstChild.offsetHeight + 'px';
     }
@@ -148,7 +170,7 @@
                 delete data[lang].mp4hd2;
             if (data[lang].mp4sd)
                 delete data[lang].flvhd,
-                    typeDropMap = {
+                typeDropMap = {
                     'mp4hd3v2': 'mp4hd2v2',
                     'mp4hd2v2': 'mp4hd',
                     'mp4hd': 'mp4sd'
@@ -213,7 +235,7 @@
     }
 
     function switchLang(lang) {
-        Array.from(abpinst.playerUnit.querySelectorAll('.BiliPlus-Scale-Menu .Video-Defination>div')).forEach(function (i) {
+        Array.from(abpinst.playerUnit.querySelectorAll('.BiliPlus-Scale-Menu .Video-Defination>div')).forEach(function(i) {
             i.remove();
         });
 
@@ -242,7 +264,11 @@
             dots.stopTimer();
             let error = json.error;
             createPopup({
-                content: [_('p', { style: { fontSize: '16px' } }, [_('text', _t('fetchSourceErr'))]), _('text', JSON.stringify(json.error))],
+                content: [_('p', {
+                    style: {
+                        fontSize: '16px'
+                    }
+                }, [_('text', _t('fetchSourceErr'))]), _('text', JSON.stringify(json.error))],
                 showConfirm: false
             });
             return;
@@ -260,7 +286,7 @@
                 abpinst.title = pageInfo.title + ' - AC' + pageInfo.id;
             abpinst.playerUnit.addEventListener('sendcomment', sendComment);
             abpinst.playerUnit.querySelector('.BiliPlus-Scale-Menu').style.animationName = 'scale-menu-show';
-            setTimeout(function () {
+            setTimeout(function() {
                 abpinst.playerUnit.querySelector('.BiliPlus-Scale-Menu').style.animationName = '';
             }, 2e3);
 
@@ -273,13 +299,18 @@
             if (audioLangs.length > 1) {
                 let childs = [];
                 for (let lang in audioLangs) {
-                    childs.push(_('div', { 'data-lang': lang }, [_('text', knownLangs[lang] || lang)]));
+                    childs.push(_('div', {
+                        'data-lang': lang
+                    }, [_('text', knownLangs[lang] || lang)]));
                 }
-                let langChange = _('div', { className: 'dm static' }, [
+                let langChange = _('div', {
+                    className: 'dm static'
+                }, [
                     _('div', {}, [_('text', _t('audioLang'))]),
                     _('div', {
-                        className: 'dmMenu', event: {
-                            click: function (e) {
+                        className: 'dmMenu',
+                        event: {
+                            click: function(e) {
                                 let lang = e.target.getAttribute('data-lang');
                                 if (lang == currentLang)
                                     return;
@@ -304,7 +335,8 @@
             if (json.preview)
                 abpinst.playerUnit.dispatchEvent(new CustomEvent('previewData', {
                     detail: {
-                        code: 0, data: {
+                        code: 0,
+                        data: {
                             img_x_len: 10,
                             img_y_len: 10,
                             img_x_size: 128,
@@ -335,7 +367,7 @@
         firstTime = false;
     }
 
-    window.changeSrc = function (e, t, force) {
+    window.changeSrc = function(e, t, force) {
         let div = abpinst.playerUnit.querySelector('#info-box');
         if ((abpinst == undefined || (currentSrc == t)) && !force)
             return false;
@@ -361,6 +393,7 @@
             flvparam(t);
         }
     };
+
     function reloadSegment() {
         let io = this._transmuxer._controller._ioctl;
         clearInterval(this._progressChecker);
@@ -370,7 +403,7 @@
         this._transmuxer._controller._enableStatisticsReporter();
     }
     let self = window;
-    let createPlayer = function (e) {
+    let createPlayer = function(e) {
         if (self.flvplayer != undefined) {
             self.flvplayer.unload();
             self.flvplayer.destroy();
@@ -384,14 +417,14 @@
         self.flvplayer.load();
         self.flvplayer.reloadSegment = reloadSegment;
     };
-    window.addEventListener('beforeunload', function () {
+    window.addEventListener('beforeunload', function() {
         if (self.flvplayer != undefined) {
             self.flvplayer.unload();
             self.flvplayer.destroy();
             delete self.flvplayer;
         }
     })
-    let load_fail = function (type, info, detail) {
+    let load_fail = function(type, info, detail) {
         if (['youku', 'youku2'].indexOf(pageInfo.sourceType) != -1 && detail.code == 403) {
             sourceTypeRoute();
             return;
@@ -425,11 +458,23 @@
         abpinst.playerUnit.querySelector('.ABP-Video').insertBefore(div, document.querySelector('.ABP-Video>:first-child'));
         abpinst.playerUnit.querySelector('#info-box').remove();
         createPopup({
-            content: [_('p', { style: { fontSize: '16px' } }, [_('text', _t('playErr'))]), _('div', { style: { whiteSpace: 'pre-wrap' } }, [_('text', JSON.stringify({ type, info, detail }, null, '  '))])],
+            content: [_('p', {
+                style: {
+                    fontSize: '16px'
+                }
+            }, [_('text', _t('playErr'))]), _('div', {
+                style: {
+                    whiteSpace: 'pre-wrap'
+                }
+            }, [_('text', JSON.stringify({
+                type,
+                info,
+                detail
+            }, null, '  '))])],
             showConfirm: false
         });
     };
-    let flvparam = function (select) {
+    let flvparam = function(select) {
         currentSrc = select;
         createPlayer({
             detail: {
@@ -438,21 +483,25 @@
                     seekType: 'range',
                     reuseRedirectedURL: true,
                     fixAudioTimestampGap: false,
-                    customLoader:true,
-                    tmfunc:GM_xmlhttpRequest,
-                    headers:{
-                        'Referer':window.location.href,
-                        'User-Agent':window.navigator.userAgent
+                    customLoader: true,
+                    tmfunc: GM_xmlhttpRequest,
+                    headers: {
+                        'Referer': window.location.href,
+                        'User-Agent': window.navigator.userAgent
                     }
                 }
             }
         });
         if (srcUrl[select].partial) {
-            setTimeout(function () { abpinst.createPopup(_t('partialAvailable'), 3e3); }, 4e3);
+            setTimeout(function() {
+                abpinst.createPopup(_t('partialAvailable'), 3e3);
+            }, 4e3);
         }
         if (srcUrl[select].segments) {
             let totalSize = 0;
-            srcUrl[select].segments.forEach(function (i) { totalSize += i.filesize; });
+            srcUrl[select].segments.forEach(function(i) {
+                totalSize += i.filesize;
+            });
             window.overallBitrate = totalSize / srcUrl.duration * 8;
         } else {
             window.overallBitrate = srcUrl[select].filesize / srcUrl.duration * 8;
@@ -460,9 +509,10 @@
     };
 
     let danmuParse = new AcfunFormat.JSONParser;
+
     function parseComment(data) {
         let list = abpinst.cmManager.timeline;
-        let itemParse = function (i) {
+        let itemParse = function(i) {
             let cmt = danmuParse.parseOne(i);
             list.push(cmt);
         };
@@ -470,6 +520,7 @@
         data[2].forEach(itemParse);
         abpinst.cmManager.load(list);
     }
+
     function loadCommentBySize(data) {
         for (let i = 1, page = Math.ceil((data[1] + data[2]) / 1e3); i <= page && i <= 12; i++) {
             fetch('http://danmu.aixifan.com/V2/' + pageInfo.vid + '?pageSize=1000&pageNo=' + i, {
@@ -477,13 +528,14 @@
                 credentials: 'include',
                 referrer: location.href,
                 cache: 'no-cache'
-            }).then(function (r) {
-                r.json().then(function (data) {
+            }).then(function(r) {
+                r.json().then(function(data) {
                     parseComment(data);
                 });
             });
         }
     }
+
     function sendComment(e) {
         let cmt = e.detail;
         let obj = {
@@ -505,22 +557,28 @@
     let dest = null;
     let ABPConfig;
     let currentBangumiUrl = location.href.split('?')[0];
+
     function chkInit() {
-        readStorage('PlayerSettings', function (item) {
+        readStorage('PlayerSettings', function(item) {
             ABPConfig = item.PlayerSettings || {};
             init();
             if (/\/bangumi\/ab/.test(currentBangumiUrl)) {
                 let observer = new MutationObserver(bangumiEpisodeChange);
-                observer.observe(document.body, { childList: true, subtree: true });
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
             }
         });
     }
+
     function bangumiEpisodeChange() {
         let newUrl = location.href.split('?')[0];
         if (newUrl != currentBangumiUrl) {
             location.href = newUrl;
         }
     }
+
     function init() {
         if (!pageInfo.vid || dest == null)
             return;
@@ -532,20 +590,46 @@
             return;
         }
         dest.remove();
-        let blob = new Blob(['<!DOCTYPE HTML><html><head><meta charset="UTF-8"><style>html,body{height:100%;width:100%;margin:0;padding:0}</style></head><body></body></html>'], { type: 'text/html' });
+        let blob = new Blob(['<!DOCTYPE HTML><html><head><meta charset="UTF-8"><style>html,body{height:100%;width:100%;margin:0;padding:0}</style></head><body></body></html>'], {
+            type: 'text/html'
+        });
         let bloburl = URL.createObjectURL(blob);
-        window.playerIframe = container.appendChild(_('iframe', { className: 'AHP-Player-Container', src: bloburl, allow: 'fullscreen; autoplay' }));
-        playerIframe.onload = function () {
+        window.playerIframe = container.appendChild(_('iframe', {
+            className: 'AHP-Player-Container',
+            src: bloburl,
+            allow: 'fullscreen; autoplay'
+        }));
+        playerIframe.onload = function() {
             URL.revokeObjectURL(bloburl);
-            fetch('https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/ABPlayer.css', {
-                method: 'GET',
-                referrerPolicy: 'no-referrer'
-            }).then(function (r) {
-                playerIframe.contentDocument.head.appendChild(_('style', {type: 'text/css'},[_('text',r.responseText)]));
-            });
+            let abcssText = window.localStorage.getItem('abcssText');
+            if (abcssText) {
+                playerIframe.contentDocument.head.appendChild(_('style', {
+                    type: 'text/css'
+                }, [_('text', abcssText)]));
+            } else {
+                fetch('https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/ABPlayer.css', {
+                    method: 'GET',
+                    referrerPolicy: 'no-referrer'
+                }).then(function(r) {
+                    if (r.responseText) {
+                        abcssText = r.responseText;
+                        window.localStorage.setItem('abcssText', abcssText);
+                        playerIframe.contentDocument.head.appendChild(_('style', {
+                            type: 'text/css'
+                        }, [_('text', abcssText)]));
+                    }
 
-            let video = playerIframe.contentDocument.body.appendChild(_('video', { poster: pageInfo.coverImage }));
-            window.flvplayer = { unload: function () { }, destroy: function () { } };
+                });
+            }
+
+
+            let video = playerIframe.contentDocument.body.appendChild(_('video', {
+                poster: pageInfo.coverImage
+            }));
+            window.flvplayer = {
+                unload: function() {},
+                destroy: function() {}
+            };
             abpinst = ABP.create(video.parentNode, {
                 src: {
                     playlist: [{
@@ -567,60 +651,68 @@
             dots.runTimer();
 
             fetch('http://www.acfun.cn/video/getVideo.aspx?id=' + pageInfo.vid, {
-                method: 'GET',
-                credentials: 'include',
-                cache: 'no-cache'
-            })
+                    method: 'GET',
+                    credentials: 'include',
+                    cache: 'no-cache'
+                })
                 .then(r => r.json())
                 .then(r => {
-                if (r.success) return r;
-                else if (r.result === '您所在地区限制观看') {
-                    // 代理获取，迟早被封？
-                    return fetch('https://tx.biliplus.com/acfun_getVideo?id=' + pageInfo.vid, {
-                        method: 'GET',
-                        cache: 'no-cache'
-                    }).then(r => r.json());
-                }
-                return r;
-            })
-                .then(function (data) {
-                if (data.success) {
-                    fetch('http://danmu.aixifan.com/size/' + pageInfo.vid, {
-                        method: 'GET',
-                        credentials: 'include',
-                        referrer: location.href,
-                        cache: 'no-cache'
-                    })
-                        .then(r => r.json())
-                        .then(loadCommentBySize);
-                    pageInfo.sourceId = data.sourceId;
-                    pageInfo.sourceType = data.sourceType;
-                    console.log('[AHP] Got sourceType:', data.sourceType, 'vid:', data.sourceId, data);
-                    let backupSina;
-                    // 提取sourceUrl新浪源
-                    if (['zhuzhan', 'sina', 'youku', 'youku2'].indexOf(data.sourceType) == -1 && (backupSina = (data.sourceUrl || '').match(/video\.sina\.com\.cn\/v\/b\/(\d+)-/))) {
-                        pageInfo.sourceType = 'sina';
-                        pageInfo.sourceId = backupSina[1];
-                        console.log('[AHP] Using backup sina vid: ' + pageInfo.sourceId);
+                    if (r.success) return r;
+                    else if (r.result === '您所在地区限制观看') {
+                        // 代理获取，迟早被封？
+                        return fetch('https://tx.biliplus.com/acfun_getVideo?id=' + pageInfo.vid, {
+                            method: 'GET',
+                            cache: 'no-cache'
+                        }).then(r => r.json());
                     }
-                    sourceTypeRoute(data);
-                } else {
+                    return r;
+                })
+                .then(function(data) {
+                    if (data.success) {
+                        fetch('http://danmu.aixifan.com/size/' + pageInfo.vid, {
+                                method: 'GET',
+                                credentials: 'include',
+                                referrer: location.href,
+                                cache: 'no-cache'
+                            })
+                            .then(r => r.json())
+                            .then(loadCommentBySize);
+                        pageInfo.sourceId = data.sourceId;
+                        pageInfo.sourceType = data.sourceType;
+                        console.log('[AHP] Got sourceType:', data.sourceType, 'vid:', data.sourceId, data);
+                        let backupSina;
+                        // 提取sourceUrl新浪源
+                        if (['zhuzhan', 'sina', 'youku', 'youku2'].indexOf(data.sourceType) == -1 && (backupSina = (data.sourceUrl || '').match(/video\.sina\.com\.cn\/v\/b\/(\d+)-/))) {
+                            pageInfo.sourceType = 'sina';
+                            pageInfo.sourceId = backupSina[1];
+                            console.log('[AHP] Using backup sina vid: ' + pageInfo.sourceId);
+                        }
+                        sourceTypeRoute(data);
+                    } else {
+                        dots.stopTimer();
+                        createPopup({
+                            content: [_('p', {
+                                style: {
+                                    fontSize: '16px'
+                                }
+                            }, [_('text', _t('fetchSourceErr'))]), _('text', data.result)],
+                            showConfirm: false
+                        });
+                    }
+                }).catch(function(e) {
                     dots.stopTimer();
                     createPopup({
-                        content: [_('p', { style: { fontSize: '16px' } }, [_('text', _t('fetchSourceErr'))]), _('text', data.result)],
+                        content: [_('p', {
+                            style: {
+                                fontSize: '16px'
+                            }
+                        }, [_('text', _t('fetchSourceErr'))]), _('text', e.message)],
                         showConfirm: false
                     });
-                }
-            }).catch(function (e) {
-                dots.stopTimer();
-                createPopup({
-                    content: [_('p', { style: { fontSize: '16px' } }, [_('text', _t('fetchSourceErr'))]), _('text', e.message)],
-                    showConfirm: false
                 });
-            });
         };
         container.style.position = 'relative';
-        resizeSensor(playerIframe.parentNode, function () {
+        resizeSensor(playerIframe.parentNode, function() {
             window.dispatchEvent(new Event('resize'));
             if (!playerIframe.parentNode.classList.contains('small')) {
                 playerIframe.parentNode.style.left = '';
@@ -643,46 +735,65 @@
             }
         });*/
     }
+
     function sourceTypeRoute(data) {
         switch (pageInfo.sourceType) {
             case 'sina':
                 //新浪
                 var time = parseInt((Date.now() / 1e3 | 0).toString(2).slice(0, -6), 2);
-                fetch('http://ask.ivideo.sina.com.cn/v_play.php?vid=' + pageInfo.sourceId + '&ran=0&r=ent.sina.com.cn&p=i&k=' + hex_md5(pageInfo.sourceId + 'Z6prk18aWxP278cVAH' + time + '0').substr(0, 16) + time,
-                      { method: 'GET', cache: 'no-cache', referrerPolicy: 'no-referrer' })
+                fetch('http://ask.ivideo.sina.com.cn/v_play.php?vid=' + pageInfo.sourceId + '&ran=0&r=ent.sina.com.cn&p=i&k=' + hex_md5(pageInfo.sourceId + 'Z6prk18aWxP278cVAH' + time + '0').substr(0, 16) + time, {
+                        method: 'GET',
+                        cache: 'no-cache',
+                        referrerPolicy: 'no-referrer'
+                    })
                     .then(r => r.text())
-                    .then(r => (new X2JS({ arrayAccessFormPaths: ["video.durl"] })).xml_str2json(r))
+                    .then(r => (new X2JS({
+                        arrayAccessFormPaths: ["video.durl"]
+                    })).xml_str2json(r))
                     .then(data => {
-                    if (data.video.result == 'error') {
-                        dots.stopTimer();
-                        createPopup({
-                            content: [_('p', { style: { fontSize: '16px', whiteSpace: 'pre-wrap' } }, [_('text', _t('fetchSourceErr')), _('text', JSON.stringify(data.video, null, '  '))]), _('text', location.href)],
-                            showConfirm: false
-                        });
-                    } else
-                        fetchSrcThen({
-                            stream: [{
-                                audio_lang: 'default',
-                                milliseconds_audio: data.video.timelength | 0,
-                                milliseconds_video: data.video.timelength | 0,
-                                stream_type: 'mp4hd3',
-                                segs: data.video.durl.map(function (i) {
-                                    return {
-                                        url: i.url,
-                                        size: i.filesize | 0,
-                                        total_milliseconds_audio: i.length | 0,
-                                        total_milliseconds_video: i.length | 0
-                                    };
-                                })
-                            }]
-                        });
-                });
+                        if (data.video.result == 'error') {
+                            dots.stopTimer();
+                            createPopup({
+                                content: [_('p', {
+                                    style: {
+                                        fontSize: '16px',
+                                        whiteSpace: 'pre-wrap'
+                                    }
+                                }, [_('text', _t('fetchSourceErr')), _('text', JSON.stringify(data.video, null, '  '))]), _('text', location.href)],
+                                showConfirm: false
+                            });
+                        } else
+                            fetchSrcThen({
+                                stream: [{
+                                    audio_lang: 'default',
+                                    milliseconds_audio: data.video.timelength | 0,
+                                    milliseconds_video: data.video.timelength | 0,
+                                    stream_type: 'mp4hd3',
+                                    segs: data.video.durl.map(function(i) {
+                                        return {
+                                            url: i.url,
+                                            size: i.filesize | 0,
+                                            total_milliseconds_audio: i.length | 0,
+                                            total_milliseconds_video: i.length | 0
+                                        };
+                                    })
+                                }]
+                            });
+                    });
                 break;
             case 'letv':
                 //乐视云已没救，勿念
                 dots.stopTimer();
                 createPopup({
-                    content: [_('p', { style: { fontSize: '16px', whiteSpace: 'pre-wrap' } }, [_('text', data.sourceType + ' 源大部分视频已经失效，不计划添加支持\ndetail: ' + JSON.stringify({ sourceType: data.sourceType, sourceId: pageInfo.sourceId }, null, '  '))]), _('text', location.href)],
+                    content: [_('p', {
+                        style: {
+                            fontSize: '16px',
+                            whiteSpace: 'pre-wrap'
+                        }
+                    }, [_('text', data.sourceType + ' 源大部分视频已经失效，不计划添加支持\ndetail: ' + JSON.stringify({
+                        sourceType: data.sourceType,
+                        sourceId: pageInfo.sourceId
+                    }, null, '  '))]), _('text', location.href)],
                     showConfirm: false
                 });
                 break;
@@ -694,10 +805,12 @@
                     credentials: 'include',
                     referrer: location.href,
                     cache: 'no-cache'
-                }).then(function (r) {
-                    r.json().then(function (data) {
+                }).then(function(r) {
+                    r.json().then(function(data) {
                         if (data.e && data.e.code !== 0) {
-                            return fetchSrcThen({ error: data.e });
+                            return fetchSrcThen({
+                                error: data.e
+                            });
                         }
                         let decrypted = JSON.parse(rc4(rc4_key, atob(data.data)));
                         fetchSrcThen(decrypted);
@@ -718,7 +831,7 @@
                     referrer: location.href,
                     cache: 'no-cache',
                     redirect: 'follow'
-                }).then(function (r) {
+                }).then(function(r) {
                     pageInfo.yk_cna = r.url.match(/cna=([^&]+)/)[1];
                     pageInfo.yk_vext = r.url.match(/vext=([^&]+)/)[1];
                     return fetch('https://api.youku.com/players/custom.json?client_id=0edbfd2e4fc91b72&video_id=' + pageInfo.sourceId + '&refer=http://cdn.aixifan.com/player/cooperation/AcFunXYouku.swf&vext=' + pageInfo.yk_vext + '&embsig=undefined&styleid=undefined&type=flash', {
@@ -726,24 +839,40 @@
                         credentials: 'include',
                         referrer: location.href,
                         cache: 'no-cache'
-                    }).then(function (r) { return r.json(); });
-                }).then(function (data) {
+                    }).then(function(r) {
+                        return r.json();
+                    });
+                }).then(function(data) {
                     pageInfo.yk_r = data.stealsign;
                     return fetch('https://ups.youku.com/ups/get.json?vid=' + pageInfo.sourceId + '&ccode=0405&client_ip=192.168.1.1&utid=' + pageInfo.yk_cna + '&client_ts=' + Date.now() + '&r=' + pageInfo.yk_r, {
                         method: 'GET',
                         credentials: 'include',
                         referrer: location.href,
                         cache: 'no-cache'
-                    }).then(function (r) { return r.json(); });
-                }).then(function (data) { fetchSrcThen(data.data); }).catch(e => { });
+                    }).then(function(r) {
+                        return r.json();
+                    });
+                }).then(function(data) {
+                    fetchSrcThen(data.data);
+                }).catch(e => {});
                 break;
             case 'youku_hack':
-                getYkStream(pageInfo.sourceId).then(function (data) { fetchSrcThen(data.data); });
+                getYkStream(pageInfo.sourceId).then(function(data) {
+                    fetchSrcThen(data.data);
+                });
                 break;
             default:
                 dots.stopTimer();
                 createPopup({
-                    content: [_('p', { style: { fontSize: '16px', whiteSpace: 'pre-wrap' } }, [_('text', '暂不支持的视频源：' + data.sourceType + '\n请于 '), _('a', { target: '_blank', href: 'https://github.com/esterTion/AcFun-HTML5-Player/issues' }, [_('text', 'GitHub')]), _('text', ' 留言')]), _('text', location.href)],
+                    content: [_('p', {
+                        style: {
+                            fontSize: '16px',
+                            whiteSpace: 'pre-wrap'
+                        }
+                    }, [_('text', '暂不支持的视频源：' + data.sourceType + '\n请于 '), _('a', {
+                        target: '_blank',
+                        href: 'https://github.com/esterTion/AcFun-HTML5-Player/issues'
+                    }, [_('text', 'GitHub')]), _('text', ' 留言')]), _('text', location.href)],
                     showConfirm: false
                 });
                 return;
@@ -760,10 +889,16 @@
                         ifr.remove();
                         resolve(data.data);
                     }
-                } catch (e) { }
+                } catch (e) {}
             })
             let ifr = document.body.appendChild(_('iframe', {
-                src: '//v.youku.com/v_show/id_' + vid + '.html', style: { height: 0, width: 0, display: 'none' }, muted: 'muted',
+                src: '//v.youku.com/v_show/id_' + vid + '.html',
+                style: {
+                    height: 0,
+                    width: 0,
+                    display: 'none'
+                },
+                muted: 'muted',
                 event: {
                     load: function load() {
                         console.log('[AHP] Subpage loaded, requesting stream');
@@ -775,7 +910,7 @@
         });
     }
 
-    (function () {
+    (function() {
         let noticeWidth = Math.min(500, innerWidth - 40);
         document.head.appendChild(_('style', {}, [_('text', `#AHP_Notice{
 position:fixed;left:0;right:0;top:0;height:0;z-index:20000;transition:.5s;cursor:default
@@ -855,13 +990,15 @@ background: #CCC;
     flvjs.LoggingControl.enableVerbose = false;
     flvjs.LoggingControl.enableInfo = false;
     flvjs.LoggingControl.enableDebug = false;
-    window.crc_engine = () => { return ''; };
+    window.crc_engine = () => {
+        return '';
+    };
 
 
     let webFullState = false;
-    window.addEventListener('message', function (e) {
+    window.addEventListener('message', function(e) {
         if (['AHP_CrossFrame_Fullscreen_Enter', 'AHP_CrossFrame_Fullscreen_Exit'].indexOf(e.data) == -1) return;
-        let srcFrame = Array.from(document.querySelectorAll('iframe')).find(function (i) {
+        let srcFrame = Array.from(document.querySelectorAll('iframe')).find(function(i) {
             return i.contentWindow == e.source;
         });
         if (srcFrame == undefined) return;
@@ -910,6 +1047,7 @@ background: #CCC;
     });
 
     let tempEvent, tempEventType;
+
     function eventPasser() {
         switch (tempEventType) {
             case 'keydown':
@@ -922,7 +1060,7 @@ background: #CCC;
         tempEvent = null;
         tempEventType = '';
     }
-    window.addEventListener('keydown', function (e) {
+    window.addEventListener('keydown', function(e) {
         if (typeof abpinst != 'undefined' && ['input', 'textarea'].indexOf(e.target.nodeName.toLowerCase()) == -1 && e.target.getAttribute('contenteditable') != 'true') {
             switch (e.keyCode) {
                 case 32:
