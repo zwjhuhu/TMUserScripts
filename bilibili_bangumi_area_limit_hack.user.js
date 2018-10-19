@@ -25,13 +25,20 @@
 'use strict';
 const log = console.log.bind(console, 'injector:')
 
+// 禁止log-report追踪, 只有在不限制的时候打开
+const navigator_sendBeacon = window.navigator.sendBeacon;
+window.navigator.sendBeacon = function() {};
+
+// 保存原始的localStorage防止被页面上的脚本修改
+const mystorage = window.localStorage;
+
 function injector() {
     if (document.getElementById('balh-injector-source')) {
         log(`脚本已经注入过, 不需要执行`)
         return
     }
     // @require      https://static.hdslb.com/js/md5.js
-    GM_info.scriptMetaStr.replace(new RegExp('// @require\\s+https?:(//.*)'), (match, /*p1:*/url) => {
+    GM_info.scriptMetaStr.replace(new RegExp('// @require\\s+https?:(//.*)'), (match, /*p1:*/ url) => {
         log('@require:', url)
         let $script = document.createElement('script')
         $script.className = 'balh-injector-require'
@@ -100,14 +107,14 @@ function scriptSource(invokeBy) {
         },
         const: {
             mode: {
-                DEFAULT: 'default',// 默认模式, 自动判断使用何种模式, 推荐;
+                DEFAULT: 'default', // 默认模式, 自动判断使用何种模式, 推荐;
                 REPLACE: 'replace', // 替换模式, 替换有区域限制的视频的接口的返回值;
-                REDIRECT: 'redirect',// 重定向模式, 直接重定向所有番剧视频的接口到代理服务器; 所有番剧视频都通过代理服务器获取视频地址, 如果代理服务器不稳定, 可能加载不出视频;
+                REDIRECT: 'redirect', // 重定向模式, 直接重定向所有番剧视频的接口到代理服务器; 所有番剧视频都通过代理服务器获取视频地址, 如果代理服务器不稳定, 可能加载不出视频;
             },
             server: {
                 S0: 'https://biliplus.ipcjs.win',
                 S1: 'https://www.biliplus.com',
-                defaultServer: function () {
+                defaultServer: function() {
                     return this.S1
                 },
             },
@@ -131,11 +138,11 @@ function scriptSource(invokeBy) {
             return item
         }
     }
-    const util_arr_stringify = function (arr) {
+    const util_arr_stringify = function(arr) {
         return arr.map(util_stringify).join(' ')
     }
 
-    const util_str_multiply = function (str, multiplier) {
+    const util_str_multiply = function(str, multiplier) {
         let result = ''
         for (let i = 0; i < multiplier; i++) {
             result += str
@@ -143,7 +150,7 @@ function scriptSource(invokeBy) {
         return result
     }
 
-    const util_log_hub = (function () {
+    const util_log_hub = (function() {
         const tag = GM_info.script.name + '.msg'
 
         // 计算"楼层", 若当前window就是顶层的window, 则floor为0, 以此类推
@@ -160,27 +167,27 @@ function scriptSource(invokeBy) {
         if (floor === 0) { // 只有顶层的Window才需要收集日志
             window.addEventListener('message', (event) => {
                 if (event.data instanceof Array && event.data[0] === tag) {
-                    let [/*tag*/, fromFloor, msg] = event.data
+                    let [ /*tag*/ , fromFloor, msg] = event.data
                     msgList.push(util_str_multiply('    ', fromFloor) + msg)
                 }
             })
         }
         return {
-            msg: function (msg) {
+            msg: function(msg) {
                 window.top.postMessage([tag, floor, msg], '*')
             },
-            getAllMsg: function () {
+            getAllMsg: function() {
                 return msgList.join('\n')
             }
         }
     }())
-    const util_log_impl = function (type) {
+    const util_log_impl = function(type) {
         if (r.script.is_dev) {
             // 直接打印, 会显示行数
             return window.console[type].bind(window.console, type + ':');
         } else {
             // 将log收集到util_log_hub中, 显示的行数是错误的...
-            return function (...args) {
+            return function(...args) {
                 args.unshift(type + ':')
                 window.console[type].apply(window.console, args)
                 util_log_hub.msg(util_arr_stringify(args))
@@ -193,9 +200,9 @@ function scriptSource(invokeBy) {
     log = util_log
     log(`[${GM_info.script.name} v${GM_info.script.version} (${invokeBy})] run on: ${window.location.href}`);
 
-    const util_func_noop = function () { }
-    const util_func_catched = function (func, onError) {
-        let ret = function () {
+    const util_func_noop = function() {}
+    const util_func_catched = function(func, onError) {
+        let ret = function() {
             try {
                 return func.apply(this, arguments)
             } catch (e) {
@@ -216,7 +223,7 @@ function scriptSource(invokeBy) {
         return ret
     }
 
-    const util_init = (function () {
+    const util_init = (function() {
         const RUN_AT = {
             DOM_LOADED: 0,
             DOM_LOADED_AFTER: 1,
@@ -237,8 +244,8 @@ function scriptSource(invokeBy) {
             [RUN_AT.COMPLETE]: [],
         }
         const util_page_valid = () => true // 是否要运行
-        const dclCreator = function (runAt) {
-            let dcl = function () {
+        const dclCreator = function(runAt) {
+            let dcl = function() {
                 util_init.atRun = runAt // 更新运行状态
                 const valid = util_page_valid()
                 // 优先级从大到小, index从小到大, 排序
@@ -257,9 +264,9 @@ function scriptSource(invokeBy) {
         window.addEventListener('DOMContentLoaded', dclCreator(RUN_AT.DOM_LOADED_AFTER))
         window.addEventListener('load', dclCreator(RUN_AT.COMPLETE))
 
-        const util_init = function (func, priority = PRIORITY.DEFAULT, runAt = RUN_AT.DOM_LOADED, always = false) {
+        const util_init = function(func, priority = PRIORITY.DEFAULT, runAt = RUN_AT.DOM_LOADED, always = false) {
             func = util_func_catched(func)
-            if (util_init.atRun < runAt) { // 若还没运行到runAt指定的状态, 则放到队列里去 
+            if (util_init.atRun < runAt) { // 若还没运行到runAt指定的状态, 则放到队列里去
                 callbacks[runAt].push({
                     priority,
                     index: callbacks[runAt].length, // 使用callback数组的长度, 作为添加元素的index属性
@@ -278,41 +285,41 @@ function scriptSource(invokeBy) {
         return util_init
     }())
     /** 通知模块 剽窃自 YAWF 用户脚本 硬广：https://tiansh.github.io/yawf/ */
-    const util_notify = (function () {
+    const util_notify = (function() {
         var avaliable = {};
         var shown = [];
         var use = {
-            'hasPermission': function () { return null; },
-            'requestPermission': function (callback) { return null; },
-            'hideNotification': function (notify) { return null; },
-            'showNotification': function (id, title, body, icon, delay, onclick) { return null; }
+            'hasPermission': function() { return null; },
+            'requestPermission': function(callback) { return null; },
+            'hideNotification': function(notify) { return null; },
+            'showNotification': function(id, title, body, icon, delay, onclick) { return null; }
         };
 
         // 检查一个微博是不是已经被显示过了，如果显示过了不重复显示
-        var shownFeed = function (id) {
+        var shownFeed = function(id) {
             return false;
         };
 
         // webkitNotifications
         // Tab Notifier 扩展实现此接口，但显示的桌面提示最多只能显示前两行
         if (typeof webkitNotifications !== 'undefined') avaliable.webkit = {
-            'hasPermission': function () {
+            'hasPermission': function() {
                 return [true, null, false][webkitNotifications.checkPermission()];
             },
-            'requestPermission': function (callback) {
+            'requestPermission': function(callback) {
                 return webkitNotifications.requestPermission(callback);
             },
-            'hideNotification': function (notify) {
+            'hideNotification': function(notify) {
                 notify.cancel();
                 afterHideNotification(notify);
             },
-            'showNotification': function (id, title, body, icon, delay, onclick) {
+            'showNotification': function(id, title, body, icon, delay, onclick) {
                 if (shownFeed(id)) return null;
                 var notify = webkitNotifications.createNotification(icon, title, body);
-                if (delay && delay > 0) notify.addEventListener('display', function () {
-                    setTimeout(function () { hideNotification(notify); }, delay);
+                if (delay && delay > 0) notify.addEventListener('display', function() {
+                    setTimeout(function() { hideNotification(notify); }, delay);
                 });
-                if (onclick) notify.addEventListener('click', function () {
+                if (onclick) notify.addEventListener('click', function() {
                     onclick.apply(this, arguments);
                     hideNotification(notify);
                 });
@@ -325,29 +332,29 @@ function scriptSource(invokeBy) {
         // Firefox 22+
         // 显示4秒会自动关闭 https://bugzil.la/875114
         if (typeof Notification !== 'undefined') avaliable.standard = {
-            'hasPermission': function () {
+            'hasPermission': function() {
                 return {
                     'granted': true,
                     'denied': false,
                     'default': null,
-                }[Notification.permission];
+                } [Notification.permission];
             },
-            'requestPermission': function (callback) {
+            'requestPermission': function(callback) {
                 return Notification.requestPermission(callback);
             },
-            'hideNotification': function (notify) {
+            'hideNotification': function(notify) {
                 notify.close();
                 afterHideNotification(notify);
             },
-            'showNotification': function (id, title, body, icon, delay, onclick) {
+            'showNotification': function(id, title, body, icon, delay, onclick) {
                 if (shownFeed(id)) return null;
                 var notify = new Notification(title, { 'body': body, 'icon': icon, 'requireInteraction': !delay });
-                if (delay && delay > 0) notify.addEventListener('show', function () {
-                    setTimeout(function () {
+                if (delay && delay > 0) notify.addEventListener('show', function() {
+                    setTimeout(function() {
                         hideNotification(notify);
                     }, delay);
                 });
-                if (onclick) notify.addEventListener('click', function () {
+                if (onclick) notify.addEventListener('click', function() {
                     onclick.apply(this, arguments);
                     hideNotification(notify);
                 });
@@ -356,46 +363,47 @@ function scriptSource(invokeBy) {
         };
 
         // 有哪些接口可用
-        var avaliableNotification = function () {
+        var avaliableNotification = function() {
             return Object.keys(avaliable);
         };
         // 选择用哪个接口
-        var choseNotification = function (prefer) {
+        var choseNotification = function(prefer) {
             return (use = prefer && avaliable[prefer] || avaliable.standard);
         };
         choseNotification();
         // 检查权限
-        var hasPermission = function () {
+        var hasPermission = function() {
             return use.hasPermission.apply(this, arguments);
         };
         // 请求权限
-        var requestPermission = function () {
+        var requestPermission = function() {
             return use.requestPermission.apply(this, arguments);
         };
         // 显示消息
-        var showNotification = function (id, title, body, icon, delay, onclick) {
+        var showNotification = function(id, title, body, icon, delay, onclick) {
             var notify = use.showNotification.apply(this, arguments);
             shown.push(notify);
             return notify;
         };
         // 隐藏已经显示的消息
-        var hideNotification = function (notify) {
+        var hideNotification = function(notify) {
             use.hideNotification.apply(this, arguments);
             return notify;
         };
-        var afterHideNotification = function (notify) {
-            shown = shown.filter(function (x) { return x !== notify; });
+        var afterHideNotification = function(notify) {
+            shown = shown.filter(function(x) { return x !== notify; });
         };
 
-        document.addEventListener('unload', function () {
+        document.addEventListener('unload', function() {
             shown.forEach(hideNotification);
             shown = [];
         });
-        var showNotificationAnyway = function (id, title, body, icon, delay, onclick) {
-            var that = this, thatArguments = arguments;
+        var showNotificationAnyway = function(id, title, body, icon, delay, onclick) {
+            var that = this,
+                thatArguments = arguments;
             switch (that.hasPermission()) {
                 case null: // default
-                    that.requestPermission(function () {
+                    that.requestPermission(function() {
                         showNotificationAnyway.apply(that, thatArguments);
                     });
                     break;
@@ -417,78 +425,126 @@ function scriptSource(invokeBy) {
             'requestPermission': requestPermission,
             'showNotification': showNotification,
             'hideNotification': hideNotification,
-            show: function (body, onclick, delay = 3e3) {
+            show: function(body, onclick, delay = 3e3) {
                 return this.showNotificationAnyway(Date.now(), GM_info.script.name, body, '//bangumi.bilibili.com/favicon.ico', delay, onclick)
             },
             showNotificationAnyway
         };
     }())
-    const util_cookie = (function () {
-        function getCookies() {
-            var map = document.cookie.split('; ').reduce(function (obj, item) {
-                var entry = item.split('=');
-                obj[entry[0]] = entry[1];
-                return obj;
-            }, {});
-            return map;
-        }
 
-        function getCookie(key) {
-            return getCookies()[key];
-        }
+    //使用locaStorage存储,原始脚本中用的cookie可以被追踪,同时浪费流量,还有长度限制
+    //同时给个加密,很难简单就是异或一把
+    const util_storage = (function() {
 
-        /**
-         * @param key     key
-         * @param value   为undefined时, 表示删除cookie
-         * @param options 为undefined时, 表示过期时间为3年
-         *          为''时, 表示Session cookie
-         *          为数字时, 表示指定过期时间
-         *          为{}时, 表示指定所有的属性
-         * */
-        function setCookie(key, value, options) {
-            if (typeof options !== 'object') {
-                options = {
-                    domain: '.bilibili.com',
-                    path: '/',
-                    'max-age': value === undefined ? 0 : (options === undefined ? 94608000 : options)
-                };
+        const xorKey = 'zwj';
+        const allKey = 'tmarea';
+        const enAllKey = encrypt(allKey);
+
+        function encrypt(val) {
+            if (!val) {
+                return;
             }
-            var c = Object.keys(options).reduce(function (str, key) {
-                return str + '; ' + key + '=' + options[key];
-            }, key + '=' + value);
-            document.cookie = c;
-            return c;
+            let str = val;
+            while (str.length % xorKey.length) {
+                str += ' ';
+            }
+            let ret = '',
+                tmp;
+            for (let i = 0, len = str.length, step = xorKey.length; i < len; i += step) {
+                for (let j = 0; j < step; j++) {
+                    tmp = (str[i + j].codePointAt(0) ^ xorKey[j].codePointAt(0)).toString(16);
+                    while (tmp.length != 4) {
+                        tmp = '0' + tmp;
+                    }
+                    ret += tmp;
+                }
+            }
+            return ret;
         }
 
-        return new Proxy({ set: setCookie, get: getCookie, all: getCookies }, {
-            get: function (target, prop) {
-                if (prop in target) return target[prop]
-                return getCookie(prop)
+        function decrypt(val) {
+            if (!val) {
+                return;
+            }
+            let str = val;
+            let ret = '';
+            for (let i = 0, len = str.length, step = xorKey.length, j = 0; i < len; i += 4) {
+                ret += String.fromCodePoint(parseInt(str.substring(i, i + 4), 16) ^ xorKey[j++].codePointAt(0));
+                if (j == step) {
+                    j = 0;
+                }
+            }
+            return ret.trim();
+        }
+
+        function getValues() {
+            let str = decrypt(mystorage.getItem(enAllKey));
+            if (!str) {
+                return {};
+            }
+
+            return JSON.parse(str);
+        }
+
+        function getValue(key) {
+            return getValues()[key];
+        }
+
+        function setValue(key, value) {
+            if (!key) {
+                return;
+            }
+            if (!value) {
+                removeValue(key);
+            } else {
+                let saved = getValues();
+                saved[key] = value;
+                mystorage.setItem(enAllKey, encrypt(JSON.stringify(saved)));
+            }
+
+        }
+
+        function removeValue(key) {
+            let saved = getValues();
+            if (saved[key]) {
+                delete saved[key];
+                mystorage.setItem(enAllKey, encrypt(JSON.stringify(saved)));
+            }
+        }
+
+        return new Proxy({ set: setValue, get: getValue, all: getValues, remove: removeValue }, {
+            get: function(target, prop) {
+                if (prop in target) return target[prop];
+                return getValue(prop);
             },
-            set: function (target, prop, value) {
-                setCookie(prop, value)
-                return true
+            set: function(target, prop, value) {
+                setValue(prop, value);
+                return true;
             }
         })
-    }())
+    }());
+    // 统一localStorage
+    const localStorage = util_storage;
+
+
     const Promise = window.Promise // 在某些情况下, 页面中会修改window.Promise... 故我们要备份一下原始的Promise
-    const util_promise_plus = (function () {
+    const util_promise_plus = (function() {
         /**
-        * 模仿RxJava中的compose操作符  
-        * @param transformer 转换函数, 传入Promise, 返回Promise; 若为空, 则啥也不做
-        */
-        Promise.prototype.compose = function (transformer) {
+         * 模仿RxJava中的compose操作符
+         * @param transformer 转换函数, 传入Promise, 返回Promise; 若为空, 则啥也不做
+         */
+        Promise.prototype.compose = function(transformer) {
             return transformer ? transformer(this) : this
         }
     }())
-    const util_promise_timeout = function (timeout) {
+    const util_promise_timeout = function(timeout) {
         return new Promise((resolve, reject) => {
             setTimeout(resolve, timeout);
         })
     }
     // 直到满足condition()为止, 才执行promiseCreator(), 创建Promise
     // https://stackoverflow.com/questions/40328932/javascript-es6-promise-for-loop
-    const util_promise_condition = function (condition, promiseCreator, retryCount = Number.MAX_VALUE, interval = 1) {
+    const util_promise_condition = function(condition, promiseCreator, retryCount = Number.MAX_VALUE, interval = 1) {
         const loop = (time) => {
             if (!condition()) {
                 if (time < retryCount) {
@@ -503,16 +559,16 @@ function scriptSource(invokeBy) {
         return loop(0)
     }
 
-    const util_ajax = function (options) {
-        const creator = () => new Promise(function (resolve, reject) {
+    const util_ajax = function(options) {
+        const creator = () => new Promise(function(resolve, reject) {
             typeof options !== 'object' && (options = { url: options });
 
             options.async === undefined && (options.async = true);
             options.xhrFields === undefined && (options.xhrFields = { withCredentials: true });
-            options.success = function (data) {
+            options.success = function(data) {
                 resolve(data);
             };
-            options.error = function (err) {
+            options.error = function(err) {
                 reject(err);
             };
             util_debug('ajax:', options.url)
@@ -521,12 +577,12 @@ function scriptSource(invokeBy) {
         return util_promise_condition(() => window.$, creator, 100, 100) // 重试 100 * 100 = 10s
     }
     /**
-    * @param promiseCeator  创建Promise的函数
-    * @param resultTranformer 用于变换result的函数, 返回新的result或Promise
-    * @param errorTranformer  用于变换error的函数, 返回新的error或Promise, 返回的Promise可以做状态恢复...
-    */
-    const util_async_wrapper = function (promiseCeator, resultTranformer, errorTranformer) {
-        return function (...args) {
+     * @param promiseCeator  创建Promise的函数
+     * @param resultTranformer 用于变换result的函数, 返回新的result或Promise
+     * @param errorTranformer  用于变换error的函数, 返回新的error或Promise, 返回的Promise可以做状态恢复...
+     */
+    const util_async_wrapper = function(promiseCeator, resultTranformer, errorTranformer) {
+        return function(...args) {
             return new Promise((resolve, reject) => {
                 // log(promiseCeator, ...args)
                 promiseCeator(...args)
@@ -544,7 +600,7 @@ function scriptSource(invokeBy) {
         }
     }
     /**
-     * 创建元素的快捷方法: 
+     * 创建元素的快捷方法:
      * 1. type, props, children
      * 2. type, props, innerHTML
      * 3. 'text', text
@@ -587,29 +643,29 @@ function scriptSource(invokeBy) {
         return elem;
     }
     const _ = util_ui_element_creator
-    const util_jsonp = function (url, callback) {
+    const util_jsonp = function(url, callback) {
         return new Promise((resolve, reject) => {
             document.head.appendChild(_('script', {
                 src: url,
                 event: {
-                    load: function () {
+                    load: function() {
                         resolve()
                     },
-                    error: function () {
+                    error: function() {
                         reject()
                     }
                 }
             }));
         })
     }
-    const util_generate_sign = function (params, key) {
+    const util_generate_sign = function(params, key) {
         var s_keys = [];
-        for (var i in params) {
+        for (let i in params) {
             s_keys.push(i);
         }
         s_keys.sort();
         var data = "";
-        for (var i = 0; i < s_keys.length; i++) {
+        for (let i = 0; i < s_keys.length; i++) {
             // encodeURIComponent 返回的转义数字必须为大写( 如 %2F )
             data += (data ? "&" : "") + s_keys[i] + "=" + encodeURIComponent(params[s_keys[i]]);
         }
@@ -620,17 +676,18 @@ function scriptSource(invokeBy) {
     }
     const util_xml2obj = (xml) => {
         try {
-            var obj = {}, text;
+            var obj = {},
+                text;
             var children = xml.children;
             if (children.length > 0) {
                 for (var i = 0; i < children.length; i++) {
                     var item = children.item(i);
                     var nodeName = item.nodeName;
 
-                    if (typeof (obj[nodeName]) == "undefined") { // 若是新的属性, 则往obj中添加
+                    if (typeof(obj[nodeName]) == "undefined") { // 若是新的属性, 则往obj中添加
                         obj[nodeName] = util_xml2obj(item);
                     } else {
-                        if (typeof (obj[nodeName].push) == "undefined") { // 若老的属性没有push方法, 则把属性改成Array
+                        if (typeof(obj[nodeName].push) == "undefined") { // 若老的属性没有push方法, 则把属性改成Array
                             var old = obj[nodeName];
 
                             obj[nodeName] = [];
@@ -654,7 +711,7 @@ function scriptSource(invokeBy) {
             util_error(e);
         }
     }
-    const util_ui_popframe = function (iframeSrc) {
+    const util_ui_popframe = function(iframeSrc) {
         if (!document.getElementById('balh-style-login')) {
             var style = document.createElement('style');
             style.id = 'balh-style-login';
@@ -664,13 +721,13 @@ function scriptSource(invokeBy) {
         var div = document.createElement('div');
         div.id = 'GMBiliPlusLoginContainer';
         div.innerHTML = '<div style="position:fixed;top:0;left:0;z-index:10000;width:100%;height:100%;background:rgba(0,0,0,.5);animation-fill-mode:forwards;animation-name:pop-iframe-in;animation-duration:.5s;cursor:pointer"><iframe src="' + iframeSrc + '" style="background:#e4e7ee;position:absolute;top:10%;left:10%;width:80%;height:80%"></iframe><div class="GMBiliPlusCloseBox">×</div></div>';
-        div.firstChild.addEventListener('click', function (e) {
+        div.firstChild.addEventListener('click', function(e) {
             if (e.target === this || e.target.className === 'GMBiliPlusCloseBox') {
                 if (!confirm('确认关闭？')) {
                     return false;
                 }
                 div.firstChild.style.animationName = 'pop-iframe-out';
-                setTimeout(function () {
+                setTimeout(function() {
                     div.remove();
                 }, 5e2);
             }
@@ -678,7 +735,7 @@ function scriptSource(invokeBy) {
         document.body.appendChild(div);
     }
 
-    const util_ui_alert = function (message, resolve, reject) {
+    const util_ui_alert = function(message, resolve, reject) {
         setTimeout(() => {
             if (resolve) {
                 if (window.confirm(message)) {
@@ -701,7 +758,7 @@ function scriptSource(invokeBy) {
      * - param.onConfirm: 确定回调
      * - param.onClose: 关闭回调
      */
-    const util_ui_pop = function (param) {
+    const util_ui_pop = function(param) {
         if (typeof param.content === 'string') {
             let template = _('template');
             template.innerHTML = param.content.trim()
@@ -725,11 +782,14 @@ function scriptSource(invokeBy) {
             childs.push(_('input', { value: param.confirmBtn || _t('ok'), type: 'button', className: 'confirm', event: { click: param.onConfirm } }));
         }
         childs.push(_('input', {
-            value: _t('close'), type: 'button', className: 'close', event: {
-                click: function () {
+            value: _t('close'),
+            type: 'button',
+            className: 'close',
+            event: {
+                click: function() {
                     param.onClose && param.onClose();
                     div.style.height = 0;
-                    setTimeout(function () { div.remove(); }, 500);
+                    setTimeout(function() { div.remove(); }, 500);
                 }
             }
         }));
@@ -746,7 +806,7 @@ function scriptSource(invokeBy) {
      * MessageBox.show(referenceElement, message, closeTime, boxType, buttonTypeConfirmCallback)
      * MessageBox.close()
      */
-    const util_ui_msg = (function () {
+    const util_ui_msg = (function() {
         function MockMessageBox() {
             this.show = (...args) => util_log(MockMessageBox.name, 'show', args)
             this.close = (...args) => util_log(MockMessageBox.name, 'close', args)
@@ -756,11 +816,11 @@ function scriptSource(invokeBy) {
         let mockPopMessage = new MockMessageBox()
         let notifyPopMessage = {
             _current_notify: null,
-            show: function (referenceElement, message, closeTime, boxType, buttonTypeConfirmCallback) {
+            show: function(referenceElement, message, closeTime, boxType, buttonTypeConfirmCallback) {
                 this.close()
                 this._current_notify = util_notify.show(message, buttonTypeConfirmCallback, closeTime)
             },
-            close: function () {
+            close: function() {
                 if (this._current_notify) {
                     util_notify.hideNotification(this._current_notify)
                     this._current_notify = null
@@ -768,7 +828,7 @@ function scriptSource(invokeBy) {
             }
         }
         let alertPopMessage = {
-            show: function (referenceElement, message, closeTime, boxType, buttonTypeConfirmCallback) {
+            show: function(referenceElement, message, closeTime, boxType, buttonTypeConfirmCallback) {
                 util_ui_alert(message, buttonTypeConfirmCallback)
             },
             close: util_func_noop
@@ -778,11 +838,11 @@ function scriptSource(invokeBy) {
             if (!popMessage && window.MessageBox) {
                 popMessage = new window.MessageBox()
                 let orignShow = popMessage.show
-                popMessage.show = function (referenceElement, message, closeTime, boxType, buttonTypeConfirmCallback) {
+                popMessage.show = function(referenceElement, message, closeTime, boxType, buttonTypeConfirmCallback) {
                     // 这个窗，有一定机率弹不出来。。。不知道为什么
                     orignShow.call(this, referenceElement, message.replace('\n', '<br>'), closeTime, boxType, buttonTypeConfirmCallback)
                 }
-                popMessage.close = function () {
+                popMessage.close = function() {
                     // 若没调用过show, 就调用close, msgbox会为null, 导致报错
                     this.msgbox != null && window.MessageBox.prototype.close.apply(this, arguments)
                 }
@@ -790,30 +850,30 @@ function scriptSource(invokeBy) {
         }, util_init.PRIORITY.FIRST, util_init.RUN_AT.DOM_LOADED_AFTER)
 
         return {
-            _impl: function () {
+            _impl: function() {
                 return popMessage || alertPopMessage
             },
-            show: function (referenceElement, message, closeTime, boxType, buttonTypeConfirmCallback) {
+            show: function(referenceElement, message, closeTime, boxType, buttonTypeConfirmCallback) {
                 let pop = this._impl()
                 return pop.show.apply(pop, arguments)
             },
-            close: function () {
+            close: function() {
                 let pop = this._impl()
                 return pop.close.apply(pop, arguments)
             },
-            setMsgBoxFixed: function (fixed) {
+            setMsgBoxFixed: function(fixed) {
                 if (popMessage) {
                     popMessage.msgbox[0].style.position = fixed ? 'fixed' : ''
                 } else {
                     util_log(MockMessageBox.name, 'setMsgBoxFixed', fixed)
                 }
             },
-            showOnNetError: function (e) {
+            showOnNetError: function(e) {
                 if (e.readyState === 0) {
                     this.show($('.balh_settings'), '哎呀，服务器连不上了，进入设置窗口，换个服务器试试？', 0, 'button', balh_ui_setting.show);
                 }
             },
-            showOnNetErrorInPromise: function () {
+            showOnNetErrorInPromise: function() {
                 return p => p
                     .catch(e => {
                         this.showOnNetError(e)
@@ -822,7 +882,7 @@ function scriptSource(invokeBy) {
             }
         }
     }())
-    const util_ui_player_msg = function (message) {
+    const util_ui_player_msg = function(message) {
         const msg = util_stringify(message)
         log('player msg:', msg)
         const $panel = document.querySelector('.bilibili-player-video-panel-text')
@@ -831,7 +891,7 @@ function scriptSource(invokeBy) {
             $panel.appendChild(_('div', { className: 'bilibili-player-video-panel-row', stage: stage }, [_('text', `[${GM_info.script.name}] ${msg}`)]))
         }
     }
-    const util_ui_copy = function (text, textarea) {
+    const util_ui_copy = function(text, textarea) {
         textarea.value = text
         textarea.select()
         try {
@@ -841,7 +901,7 @@ function scriptSource(invokeBy) {
         }
         return false
     }
-    const util_url_param = function (url, key) {
+    const util_url_param = function(url, key) {
         return (url.match(new RegExp('[?|&]' + key + '=(\\w+)')) || ['', ''])[1];
     }
 
@@ -862,10 +922,10 @@ function scriptSource(invokeBy) {
         anime_ss_m: () => location.href.includes('m.bilibili.com/bangumi/play/ss'),
     }
 
-    const balh_config = (function () {
-        const cookies = util_cookie.all() // 缓存的cookies
+    const balh_config = (function() {
+        const cookies = util_storage.all() // 缓存的cookies
         return new Proxy({ /*保存config的对象*/ }, {
-            get: function (target, prop) {
+            get: function(target, prop) {
                 if (prop in target) {
                     return target[prop]
                 } else { // 若target中不存在指定的属性, 则从缓存的cookies中读取, 并保存到target中
@@ -894,29 +954,29 @@ function scriptSource(invokeBy) {
                     return value
                 }
             },
-            set: function (target, prop, value) {
+            set: function(target, prop, value) {
                 target[prop] = value // 更新值
-                util_cookie['balh_' + prop] = value // 更新cookie中的值
+                util_storage['balh_' + prop] = value // 更新cookie中的值
                 return true
             }
         })
     }())
 
-    const balh_api_plus_view = function (aid, update = true) {
+    const balh_api_plus_view = function(aid, update = true) {
         return util_ajax(`${balh_config.server}/api/view?id=${aid}&update=${update}`)
     }
-    const balh_api_plus_season = function (season_id) {
+    const balh_api_plus_season = function(season_id) {
         return util_ajax(`${balh_config.server}/api/bangumi?season=${season_id}`)
     }
     // https://www.biliplus.com/BPplayurl.php?otype=json&cid=30188339&module=bangumi&qn=16&src=vupload&vid=vupload_30188339
     // qn = 16, 能看
-    const balh_api_plus_playurl = function (cid, qn = 16, bangumi = true) {
+    const balh_api_plus_playurl = function(cid, qn = 16, bangumi = true) {
         return util_ajax(`${balh_config.server}/BPplayurl.php?otype=json&cid=${cid}${bangumi ? '&module=bangumi' : ''}&qn=${qn}&src=vupload&vid=vupload_${cid}`)
     }
     // https://www.biliplus.com/api/h5play.php?tid=33&cid=31166258&type=vupload&vid=vupload_31166258&bangumi=1
     const balh_api_plus_playurl_for_mp4 = (cid, bangumi = true) => util_ajax(`${balh_config.server}/api/h5play.php?tid=33&cid=${cid}&type=vupload&vid=vupload_${cid}&bangumi=${bangumi ? 1 : 0}`)
         .then(text => (text.match(/srcUrl=\{"mp4":"(https?.*)"\};/) || ['', ''])[1]); // 提取mp4的url
-    const balh_feature_switch_to_old_player = (function () {
+    const balh_feature_switch_to_old_player = (function() {
         if (!util_page.av() || localStorage.balh_disable_switch_to_old_player) {
             return
         }
@@ -932,7 +992,7 @@ function scriptSource(invokeBy) {
             }
         })
     })()
-    const balh_feature_area_limit_new = (function () {
+    const balh_feature_area_limit_new = (function() {
         if (!(util_page.av() && balh_config.enable_in_av)) {
             return
         }
@@ -955,12 +1015,12 @@ function scriptSource(invokeBy) {
             })
         }
     })()
-    const balh_feature_area_limit = (function () {
+    const balh_feature_area_limit = (function() {
         function injectXHR() {
             util_debug('XMLHttpRequest的描述符:', Object.getOwnPropertyDescriptor(window, 'XMLHttpRequest'))
             let firstCreateXHR = true
             window.XMLHttpRequest = new Proxy(window.XMLHttpRequest, {
-                construct: function (target, args) {
+                construct: function(target, args) {
                     // 第一次创建XHR时, 打上断点...
                     if (firstCreateXHR && r.script.is_dev) {
                         firstCreateXHR = false
@@ -968,11 +1028,11 @@ function scriptSource(invokeBy) {
                     }
                     let container = {} // 用来替换responseText等变量
                     return new Proxy(new target(...args), {
-                        set: function (target, prop, value, receiver) {
+                        set: function(target, prop, value, receiver) {
                             if (prop === 'onreadystatechange') {
                                 container.__onreadystatechange = value
                                 let cb = value
-                                value = function (event) {
+                                value = function(event) {
                                     if (target.readyState === 4) {
                                         if (target.responseURL.includes('bangumi.bilibili.com/view/web_api/season/user/status')) {
                                             log('/season/user/status:', target.responseText)
@@ -1004,9 +1064,9 @@ function scriptSource(invokeBy) {
                                             }
                                         } else if (target.responseURL.includes('api.bilibili.com/x/web-interface/nav')) {
                                             let json = JSON.parse(target.responseText)
-                                            log('/x/web-interface/nav', (json.data && json.data.isLogin)
-                                                ? { uname: json.data.uname, isLogin: json.data.isLogin, level: json.data.level_info.current_level, vipType: json.data.vipType, vipStatus: json.data.vipStatus }
-                                                : target.responseText)
+                                            log('/x/web-interface/nav', (json.data && json.data.isLogin) ?
+                                                { uname: json.data.uname, isLogin: json.data.isLogin, level: json.data.level_info.current_level, vipType: json.data.vipType, vipStatus: json.data.vipStatus } :
+                                                target.responseText)
                                             if (json.code === 0 && json.data && balh_config.blocked_vip) {
                                                 json.data.vipType = 2; // 类型, 年度大会员
                                                 json.data.vipStatus = 1; // 状态, 启用
@@ -1016,7 +1076,7 @@ function scriptSource(invokeBy) {
                                             util_log('/x/player/playurl', 'origin', `block: ${container.__block_response}`, target.response)
                                             // todo      : 当前只实现了r.const.mode.REPLACE, 需要支持其他模式
                                             // 2018-10-14: 等B站全面启用新版再说(;¬_¬)
-                                            
+
                                         }
                                         if (container.__block_response) {
                                             // 屏蔽并保存response
@@ -1031,13 +1091,13 @@ function scriptSource(invokeBy) {
                             target[prop] = value
                             return true
                         },
-                        get: function (target, prop, receiver) {
+                        get: function(target, prop, receiver) {
                             if (prop in container) return container[prop]
                             let value = target[prop]
                             if (typeof value === 'function') {
                                 let func = value
                                 // open等方法, 必须在原始的xhr对象上才能调用...
-                                value = function () {
+                                value = function() {
                                     if (prop === 'open') {
                                         container.__method = arguments[0]
                                         container.__url = arguments[1]
@@ -1079,6 +1139,9 @@ function scriptSource(invokeBy) {
                                                     return data
                                                 })
                                                 .compose(dispatchResultTransformerCreator())
+                                        } else if (container.__url.includes('data.bilibili.com') && isAreaLimitSeason()) {
+                                            // 禁止log-report追踪
+                                            return;
                                         }
                                     }
                                     return func.apply(target, arguments)
@@ -1093,7 +1156,7 @@ function scriptSource(invokeBy) {
 
         function injectAjax() {
             let originalAjax = $.ajax;
-            $.ajax = function (arg0, arg1) {
+            $.ajax = function(arg0, arg1) {
                 let param;
                 if (arg1 === undefined) {
                     param = arg0;
@@ -1118,10 +1181,11 @@ function scriptSource(invokeBy) {
                         .then(json => {
                             log(json);
                             if (json.code === -40301 // 区域限制
-                                || json.result.payment && json.result.payment.price != 0 && balh_config.blocked_vip) { // 需要付费的视频, 此时B站返回的cid是错了, 故需要使用代理服务器的接口
+                                ||
+                                json.result.payment && json.result.payment.price != 0 && balh_config.blocked_vip) { // 需要付费的视频, 此时B站返回的cid是错了, 故需要使用代理服务器的接口
                                 areaLimit(true);
                                 return one_api.asyncAjax(param.url)
-                                    .catch(e => json)// 新的请求报错, 也应该返回原来的数据
+                                    .catch(e => json) // 新的请求报错, 也应该返回原来的数据
                             } else {
                                 areaLimit(false);
                                 if ((balh_config.blocked_vip || balh_config.remove_pre_ad) && json.code === 0 && json.result.pre_ad) {
@@ -1131,8 +1195,10 @@ function scriptSource(invokeBy) {
                             }
                         })
                 } else if (param.url.match('/player/web_api/playurl') // 老的番剧页面playurl接口
-                    || param.url.match('/player/web_api/v2/playurl') // 新的番剧页面playurl接口
-                    || (balh_config.enable_in_av && param.url.match('//interface.bilibili.com/v2/playurl')) // 普通的av页面playurl接口
+                    ||
+                    param.url.match('/player/web_api/v2/playurl') // 新的番剧页面playurl接口
+                    ||
+                    (balh_config.enable_in_av && param.url.match('//interface.bilibili.com/v2/playurl')) // 普通的av页面playurl接口
                 ) {
                     one_api = bilibiliApis._playurl;
                     oriResultTransformer = p => p
@@ -1168,7 +1234,7 @@ function scriptSource(invokeBy) {
                         .compose(oriDispatchResultTransformer)
                 } else if (param.url.match('//interface.bilibili.com/player?')) {
                     if (balh_config.blocked_vip) {
-                        mySuccess = function (data) {
+                        mySuccess = function(data) {
                             try {
                                 let xml = new window.DOMParser().parseFromString(`<userstatus>${data.replace(/\&/g, '&amp;')}</userstatus>`, 'text/xml');
                                 let vipTag = xml.querySelector('vip');
@@ -1187,7 +1253,7 @@ function scriptSource(invokeBy) {
                     }
                 } else if (param.url.match('//api.bilibili.com/x/ad/video?')) {
                     if (balh_config.remove_pre_ad) {
-                        mySuccess = function (data) {
+                        mySuccess = function(data) {
                             log('/ad/video', data)
                             if (data && data.code === 0 && data.data) {
                                 data.data = [] // 移除广告接口返回的数据
@@ -1208,9 +1274,9 @@ function scriptSource(invokeBy) {
                     } else {
                         // 请求结果通过mySuccess/Error获取, 将其包装成Promise, 方便处理
                         new Promise((resolve, reject) => {
-                            mySuccess = resolve
-                            myError = reject
-                        }).compose(oriResultTransformer)
+                                mySuccess = resolve
+                                myError = reject
+                            }).compose(oriResultTransformer)
                             .compose(dispatchResultTransformer)
                     }
                 }
@@ -1229,7 +1295,7 @@ function scriptSource(invokeBy) {
                 // 若外部使用xhr.done()处理结果, 则替换xhr.done()
                 if (!oriSuccess && mySuccess) {
                     xhr.done(mySuccess);
-                    xhr.done = function (success) {
+                    xhr.done = function(success) {
                         oriSuccess = success; // 保存外部设置的success函数
                         return xhr;
                     };
@@ -1237,7 +1303,7 @@ function scriptSource(invokeBy) {
                 // 处理替换error
                 if (!oriError && myError) {
                     xhr.fail(myError);
-                    xhr.fail = function (error) {
+                    xhr.fail = function(error) {
                         oriError = error;
                         return xhr;
                     }
@@ -1249,7 +1315,7 @@ function scriptSource(invokeBy) {
         function injectFetch() {
             window.fetch = util_async_wrapper(window.fetch,
                 resp => new Proxy(resp, {
-                    get: function (target, prop, receiver) {
+                    get: function(target, prop, receiver) {
                         if (prop === 'json') {
                             return util_async_wrapper(target.json.bind(target),
                                 oriResult => {
@@ -1290,7 +1356,7 @@ function scriptSource(invokeBy) {
         }
 
         function isAreaLimitSeason() {
-            return util_cookie['balh_season_' + getSeasonId()];
+            return util_storage['balh_season_' + getSeasonId()];
         }
 
         function needRedirect() {
@@ -1303,8 +1369,12 @@ function scriptSource(invokeBy) {
 
         function setAreaLimitSeason(limit) {
             var season_id = getSeasonId();
-            util_cookie.set('balh_season_' + season_id, limit ? '1' : undefined, ''); // 第三个参数为'', 表示时Session类型的cookie
+            util_storage.set('balh_season_' + season_id, limit ? '1' : undefined, ''); // 第三个参数为'', 表示时Session类型的cookie
             log('setAreaLimitSeason', season_id, limit);
+            if (!limit) {
+                //打开log-report上报
+                window.navigator.sendBeacon = navigator_sendBeacon;
+            }
         }
 
         function getSeasonId() {
@@ -1366,46 +1436,47 @@ function scriptSource(invokeBy) {
             return json.durl && json.durl.length === 1 && json.durl[0].length === 15126 && json.durl[0].size === 124627;
         }
 
-        var bilibiliApis = (function () {
-            function AjaxException(message, code = 0/*用0表示未知错误*/) {
+        var bilibiliApis = (function() {
+            function AjaxException(message, code = 0 /*用0表示未知错误*/ ) {
                 this.name = 'AjaxException'
                 this.message = message
                 this.code = code
             }
-            AjaxException.prototype.toString = function () {
+            AjaxException.prototype.toString = function() {
                 return `${this.name}: ${this.message}(${this.code})`
             }
+
             function BilibiliApi(props) {
                 Object.assign(this, props);
             }
 
-            BilibiliApi.prototype.asyncAjaxByProxy = function (originUrl, success, error) {
+            BilibiliApi.prototype.asyncAjaxByProxy = function(originUrl, success, error) {
                 var one_api = this;
                 $.ajax({
                     url: one_api.transToProxyUrl(originUrl),
                     async: true,
                     xhrFields: { withCredentials: true },
-                    success: function (result) {
+                    success: function(result) {
                         log('==>', result);
                         success(one_api.processProxySuccess(result));
                         // log('success', arguments, this);
                     },
-                    error: function (e) {
+                    error: function(e) {
                         log('error', arguments, this);
                         error(e);
                     }
                 });
             };
-            BilibiliApi.prototype.asyncAjax = function (originUrl) {
+            BilibiliApi.prototype.asyncAjax = function(originUrl) {
                 return util_ajax(this.transToProxyUrl(originUrl))
                     .then(r => this.processProxySuccess(r))
                     .compose(util_ui_msg.showOnNetErrorInPromise()) // 出错时, 提示服务器连不上
             }
             var get_source_by_aid = new BilibiliApi({
-                transToProxyUrl: function (url) {
+                transToProxyUrl: function(url) {
                     return balh_config.server + '/api/view?id=' + window.aid + '&update=true';
                 },
-                processProxySuccess: function (data) {
+                processProxySuccess: function(data) {
                     if (data && data.list && data.list[0] && data.movie) {
                         return {
                             code: 0,
@@ -1434,10 +1505,10 @@ function scriptSource(invokeBy) {
                 }
             });
             var get_source_by_season_id = new BilibiliApi({
-                transToProxyUrl: function (url) {
+                transToProxyUrl: function(url) {
                     return balh_config.server + '/api/bangumi?season=' + window.season_id;
                 },
-                processProxySuccess: function (data) {
+                processProxySuccess: function(data) {
                     var found = null;
                     if (!data.code) {
                         for (var i = 0; i < data.result.episodes.length; i++) {
@@ -1448,8 +1519,8 @@ function scriptSource(invokeBy) {
                     } else {
                         util_ui_alert('代理服务器错误:' + JSON.stringify(data) + '\n点击刷新界面.', window.location.reload.bind(window.location));
                     }
-                    var returnVal = found !== null
-                        ? {
+                    var returnVal = found !== null ?
+                        {
                             "code": 0,
                             "message": "success",
                             "result": {
@@ -1464,14 +1535,14 @@ function scriptSource(invokeBy) {
                                 "pre_ad": 0,
                                 "season_status": balh_config.blocked_vip ? 2 : data.result.season_status
                             }
-                        }
-                        : { code: -404, message: '不存在该剧集' };
+                        } :
+                        { code: -404, message: '不存在该剧集' };
                     return returnVal;
                 }
             });
             var playurl_by_bilibili = new BilibiliApi({
                 dataType: 'xml',
-                transToProxyUrl: function (originUrl) {
+                transToProxyUrl: function(originUrl) {
                     const api_url = 'https://interface.bilibili.com/playurl?'
                     const bangumi_api_url = 'https://bangumi.bilibili.com/player/web_api/playurl?'
                     const SEC_NORMAL = '1c15888dc316e05a15fdd0a02ed6584f'
@@ -1494,7 +1565,7 @@ function scriptSource(invokeBy) {
                     let url = module ? bangumi_api_url : api_url + params + '&sign=' + sign
                     return url
                 },
-                processProxySuccess: function (result, alertWhenError = true) {
+                processProxySuccess: function(result, alertWhenError = true) {
                     // 将xml解析成json
                     let obj = util_xml2obj(result.documentElement)
                     if (!obj || obj.code) {
@@ -1519,17 +1590,17 @@ function scriptSource(invokeBy) {
                     log('xml2obj', result, '=>', obj)
                     return obj
                 },
-                _asyncAjax: function (originUrl) {
+                _asyncAjax: function(originUrl) {
                     return util_ajax(this.transToProxyUrl(originUrl))
                         .then(r => this.processProxySuccess(r, false))
                 }
             })
             var playurl_by_proxy = new BilibiliApi({
-                _asyncAjax: function (originUrl, bangumi) {
+                _asyncAjax: function(originUrl, bangumi) {
                     return util_ajax(this.transToProxyUrl(originUrl, bangumi))
                         .then(r => this.processProxySuccess(r, false))
                 },
-                transToProxyUrl: function (url, bangumi) {
+                transToProxyUrl: function(url, bangumi) {
                     if (bangumi === undefined) {
                         // av页面中的iframe标签形式的player, 不是番剧视频
                         bangumi = !util_page.player_in_av()
@@ -1545,7 +1616,7 @@ function scriptSource(invokeBy) {
                     }
                     return `${balh_config.server}/BPplayurl.php?${params}`;
                 },
-                processProxySuccess: function (data, alertWhenError = true) {
+                processProxySuccess: function(data, alertWhenError = true) {
                     // data有可能为null
                     if (data && data.code === -403) {
                         util_ui_alert(`突破黑洞失败\n当前代理服务器（${balh_config.server}）依然有区域限制\n\n可以考虑进行如下尝试:\n1. 进行“帐号授权”\n2. 换个代理服务器\n\n点击确定, 打开设置页面`, balh_ui_setting.show)
@@ -1561,7 +1632,7 @@ function scriptSource(invokeBy) {
                         util_ui_alert(`突破黑洞失败\n需要登录\n点此确定进行登录`, balh_feature_sign.showLogin);
                     } else {
                         if (balh_config.flv_prefer_ws) {
-                            data.durl.forEach(function (seg) {
+                            data.durl.forEach(function(seg) {
                                 var t, url, i;
                                 if (!seg.url.includes('ws.acgvideo.com')) {
                                     for (i in seg.backup_url) {
@@ -1583,7 +1654,7 @@ function scriptSource(invokeBy) {
                 }
             })
             const playurl = new BilibiliApi({
-                asyncAjax: function (originUrl) {
+                asyncAjax: function(originUrl) {
                     util_ui_player_msg('从代理服务器拉取视频地址中...')
                     return playurl_by_proxy._asyncAjax(originUrl) // 优先从代理服务器获取
                         .catch(e => {
@@ -1627,7 +1698,7 @@ function scriptSource(invokeBy) {
             injectFetch()
             util_init(() => {
                 const $wrapper = document.querySelector('.player-wrapper')
-                new MutationObserver(function (mutations, observer) {
+                new MutationObserver(function(mutations, observer) {
                     for (let mutation of mutations) {
                         if (mutation.type === 'childList') {
                             for (let node of mutation.addedNodes) {
@@ -1648,10 +1719,13 @@ function scriptSource(invokeBy) {
         if (!window.jQuery) { // 若还未加载jQuery, 则监听
             var jQuery;
             Object.defineProperty(window, 'jQuery', {
-                configurable: true, enumerable: true, set: function (v) {
+                configurable: true,
+                enumerable: true,
+                set: function(v) {
                     jQuery = v;
-                    injectAjax();// 设置jQuery后, 立即注入
-                }, get: function () {
+                    injectAjax(); // 设置jQuery后, 立即注入
+                },
+                get: function() {
                     return jQuery;
                 }
             });
@@ -1659,7 +1733,7 @@ function scriptSource(invokeBy) {
             injectAjax();
         }
     }())
-    const balh_feature_remove_pre_ad = (function () {
+    const balh_feature_remove_pre_ad = (function() {
         if (util_page.player()) {
             // 播放页面url中的pre_ad参数, 决定是否播放广告...
             if (balh_config.remove_pre_ad && util_url_param(location.href, 'pre_ad') == 1) {
@@ -1668,7 +1742,7 @@ function scriptSource(invokeBy) {
             }
         }
     }())
-    const balh_feature_check_html5 = (function () {
+    const balh_feature_check_html5 = (function() {
         function isHtml5Player() {
             return localStorage.defaulth5 === '1'
         }
@@ -1676,11 +1750,11 @@ function scriptSource(invokeBy) {
         function checkHtml5() {
             var playerContent = document.querySelector('.player-content');
             if (!localStorage.balh_h5_not_first && !isHtml5Player() && window.GrayManager && playerContent) {
-                new MutationObserver(function (mutations, observer) {
+                new MutationObserver(function(mutations, observer) {
                     observer.disconnect();
                     localStorage.balh_h5_not_first = r.const.TRUE;
                     if (window.confirm(GM_info.script.name + '只在HTML5播放器下有效，是否切换到HTML5？')) {
-                        window.GrayManager.clickMenu('change_h5');// change_flash, change_h5
+                        window.GrayManager.clickMenu('change_h5'); // change_flash, change_h5
                     }
                 }).observe(playerContent, {
                     childList: true, // 监听child的增减
@@ -1697,23 +1771,26 @@ function scriptSource(invokeBy) {
         })
         return isHtml5Player
     }())
-    const balh_feature_runPing = function () {
+    const balh_feature_runPing = function() {
         var pingOutput = document.getElementById('balh_server_ping');
 
-        var xhr = new XMLHttpRequest(), testUrl = [r.const.server.S0, r.const.server.S1],
-            testUrlIndex = 0, isReused = false, prevNow, outputArr = [];
+        var xhr = new XMLHttpRequest(),
+            testUrl = [r.const.server.S0, r.const.server.S1],
+            testUrlIndex = 0,
+            isReused = false,
+            prevNow, outputArr = [];
         pingOutput.textContent = '正在进行服务器测速…';
         pingOutput.style.height = '100px';
         xhr.open('GET', '', true);
-        xhr.onreadystatechange = function () {
+        xhr.onreadystatechange = function() {
             this.readyState == 4 && pingResult();
         };
-        var pingLoop = function () {
+        var pingLoop = function() {
             prevNow = performance.now();
             xhr.open('GET', testUrl[testUrlIndex] + '/api/bangumi', true);
             xhr.send();
         };
-        var pingResult = function () {
+        var pingResult = function() {
             var duration = (performance.now() - prevNow) | 0;
             if (isReused)
                 outputArr.push('\t复用连接：' + duration + 'ms'), isReused = false, testUrlIndex++;
@@ -1724,12 +1801,13 @@ function scriptSource(invokeBy) {
         };
         pingLoop();
     }
-    const balh_feature_sign = (function () {
+    const balh_feature_sign = (function() {
         function isLogin() {
             return localStorage.oauthTime !== undefined
         }
+
         function clearLoginFlag() {
-            delete localStorage.oauthTime
+            localStorage.oauthTime = null;
         }
 
         function updateLoginFlag(loadCallback) {
@@ -1737,8 +1815,9 @@ function scriptSource(invokeBy) {
                 .then(() => loadCallback && loadCallback(true))
             // .catch(() => loadCallback && loadCallback(false)) // 请求失败不需要回调
         }
+
         function isLoginBiliBili() {
-            return util_cookie['DedeUserID'] !== undefined
+            return util_storage['DedeUserID'] !== undefined
         }
         // 当前在如下情况才会弹一次登录提示框:
         // 1. 第一次使用
@@ -1749,8 +1828,10 @@ function scriptSource(invokeBy) {
 
             if (isLoginBiliBili()) {
                 if (!localStorage.balh_old_isLoginBiliBili // 主站 不登录 => 登录
-                    || localStorage.balh_pre_server !== balh_config.server // 代理服务器改变了
-                    || localStorage.balh_must_remind_login_v1) { // 设置了"必须提醒"flag
+                    ||
+                    localStorage.balh_pre_server !== balh_config.server // 代理服务器改变了
+                    ||
+                    localStorage.balh_must_remind_login_v1) { // 设置了"必须提醒"flag
                     clearLoginFlag()
                     updateLoginFlag(() => {
                         if (!isLogin()) {
@@ -1759,7 +1840,8 @@ function scriptSource(invokeBy) {
                         }
                     })
                 } else if ((isLogin() && Date.now() - parseInt(localStorage.oauthTime) > 24 * 60 * 60 * 1000) // 已登录，每天为周期检测key有效期，过期前五天会自动续期
-                    || localStorage.balh_must_updateLoginFlag) {// 某些情况下，必须更新一次
+                    ||
+                    localStorage.balh_must_updateLoginFlag) { // 某些情况下，必须更新一次
                     updateLoginFlag(() => localStorage.balh_must_updateLoginFlag = r.const.FALSE);
                 }
             }
@@ -1778,7 +1860,7 @@ function scriptSource(invokeBy) {
         }
 
         // 监听登录message
-        window.addEventListener('message', function (e) {
+        window.addEventListener('message', function(e) {
             switch (e.data) {
                 case 'BiliPlus-Login-Success':
                     //登入
@@ -1809,7 +1891,7 @@ function scriptSource(invokeBy) {
             isLoginBiliBili,
         }
     }())
-    const balh_feature_RedirectToBangumiOrInsertPlayer = (function () {
+    const balh_feature_RedirectToBangumiOrInsertPlayer = (function() {
         // 重定向到Bangumi页面， 或者在当前页面直接插入播放页面
         function tryRedirectToBangumiOrInsertPlayer() {
             let $errorPanel;
@@ -1826,7 +1908,7 @@ function scriptSource(invokeBy) {
                 episode_id;
             let avData;
             balh_api_plus_view(aid)
-                .then(function (data) {
+                .then(function(data) {
                     avData = data;
                     if (data.code) {
                         return Promise.reject(JSON.stringify(data));
@@ -1847,7 +1929,7 @@ function scriptSource(invokeBy) {
                         return balh_api_plus_season(season_id);
                     }
                 })
-                .then(function (result) {
+                .then(function(result) {
                     if (result === undefined) return // 上一个then不返回内容时, 不需要处理
                     if (result.code === 10) { // av属于番剧页面, 通过接口却未能找到番剧信息
                         let ep_id_newest = avData && avData.bangumi && avData.bangumi.newest_ep_id
@@ -1888,18 +1970,19 @@ function scriptSource(invokeBy) {
                         return Promise.reject('查询episode_id失败')
                     }
                 })
-                .catch(function (e) {
+                .catch(function(e) {
                     log('error:', arguments);
                     msg.innerText = 'error:' + e;
                 });
         }
 
         function generatePlayer(data, aid, page, cid) {
-            let generateSrc = function (aid, cid) {
+            let generateSrc = function(aid, cid) {
                 return `//www.bilibili.com/blackboard/html5player.html?cid=${cid}&aid=${aid}&player_type=1`;
             }
-            let generatePageList = function (pages) {
+            let generatePageList = function(pages) {
                 let $curPage = null;
+
                 function onPageBtnClick(e) {
                     e.target.className = 'curPage'
                     $curPage && ($curPage.className = '')
@@ -1908,7 +1991,7 @@ function scriptSource(invokeBy) {
                     iframe.src = generateSrc(aid, pages[index].cid);
                 }
 
-                return pages.map(function (item, index) {
+                return pages.map(function(item, index) {
                     let isCurPage = item.page == page
                     let $item = _('a', { 'data-index': index, className: isCurPage ? 'curPage' : '', event: { click: onPageBtnClick } }, [_('text', item.page + ': ' + item.part)])
                     if (isCurPage) $curPage = $item
@@ -1961,7 +2044,7 @@ function scriptSource(invokeBy) {
         })
         return true // 随便返回一个值...
     }())
-    const balh_feature_FillSeasonList = (function () {
+    const balh_feature_FillSeasonList = (function() {
         function tryFillSeasonList() {
             var error_container, season_id;
             if (!(error_container = document.querySelector('div.error-container'))) {
@@ -1992,7 +2075,7 @@ function scriptSource(invokeBy) {
             content.appendChild(msg);
             log('season>:', season_id);
             balh_api_plus_season(season_id)
-                .then(function (data) {
+                .then(function(data) {
                     log('season>then:', data);
                     if (data.code) {
                         return Promise.reject(data);
@@ -2000,7 +2083,7 @@ function scriptSource(invokeBy) {
 
                     function generateEpisodeList(episodes) {
                         var childs = [];
-                        episodes.reverse().forEach(function (i) {
+                        episodes.reverse().forEach(function(i) {
                             childs.push(_('li', { className: 'v1-bangumi-list-part-child', 'data-episode-id': i.episode_id }, [_('a', { className: 'v1-complete-text', href: '//bangumi.bilibili.com/anime/' + season_id + '/play#' + i.episode_id, title: i.index + ' ' + i.index_title, target: '_blank', style: { height: '60px' } }, [
                                 _('div', { className: 'img-wrp' }, [_('img', { src: i.cover, style: { opacity: 1 }, loaded: 'loaded', alt: i.index + ' ' + i.index_title })]),
                                 _('div', { className: 'text-wrp' }, [
@@ -2017,7 +2100,7 @@ function scriptSource(invokeBy) {
                             window.location.href = '//bangumi.bilibili.com/anime/' + event.target.attributes['data-season-id'].value;
                         }
 
-                        return seasons.map(function (season) {
+                        return seasons.map(function(season) {
                             return _('li', { className: season.season_id == season_id ? 'cur' : '', 'data-season-id': season.season_id, event: { click: onSeasonClick } }, [_('text', season.title)]);
                         });
                     }
@@ -2063,7 +2146,7 @@ function scriptSource(invokeBy) {
                         msg.parentNode.parentNode.remove();
                     }
                 })
-                .catch(function (error) {
+                .catch(function(error) {
                     log('season>catch', error);
                     msg.innerText = 'error:' + JSON.stringify(error) + '\n点击跳转到播放界面 (不一定能够正常播放...)';
                 });
@@ -2077,11 +2160,12 @@ function scriptSource(invokeBy) {
         return true
     }())
 
-    const balh_ui_setting = (function () {
+    const balh_ui_setting = (function() {
         function addSettingsButton() {
             var indexNav = document.getElementById('index_nav') || document.querySelector('.bangumi-nav-right') || document.querySelector('#fixnav_report'),
                 bottom = '110px',
-                size = '46px', settingBtnSvgContainer;
+                size = '46px',
+                settingBtnSvgContainer;
             if (indexNav == null) {
                 // 信息页添加到按钮右侧
                 if (util_page.bangumi_md()) {
@@ -2099,7 +2183,7 @@ function scriptSource(invokeBy) {
                     #balh-settings-btn:hover {
                         background: #00a1d6;
                         border-color: #00a1d6;
-                    }            
+                    }
                     #balh-settings-btn>:first-child {
                         text-align: center;
                         height: 100%;
@@ -2111,7 +2195,7 @@ function scriptSource(invokeBy) {
                     }
                     #balh-settings-btn:hover .icon-saturn {
                         fill: white;
-                    }            
+                    }
                     `)]))
                     settingBtnSvgContainer = indexNav.appendChild(_('div', { id: 'balh-settings-btn', title: GM_info.script.name + ' 设置', event: { click: showSettings } }, [_('div', {})])).firstChild;
                 }
@@ -2133,7 +2217,7 @@ function scriptSource(invokeBy) {
                 #balh-settings-btn:hover {
                     background: #00a1d6;
                     border-color: #00a1d6;
-                }            
+                }
                 #balh-settings-btn .btn-gotop {
                     text-align: center;
                 }
@@ -2144,7 +2228,7 @@ function scriptSource(invokeBy) {
                 }
                 #balh-settings-btn:hover .icon-saturn {
                     fill: white;
-                }            
+                }
                 `)]))
                 settingBtnSvgContainer = indexNav.appendChild(_('div', { id: 'balh-settings-btn', title: GM_info.script.name + ' 设置', event: { click: showSettings } }, [_('div', { className: 'btn-gotop' })])).firstChild;
             }
@@ -2155,7 +2239,7 @@ function scriptSource(invokeBy) {
             document.body.appendChild(settingsDOM);
             var form = settingsDOM.querySelector('form');
             // elements包含index的属性, 和以name命名的属性, 其中以name命名的属性是不可枚举的, 只能通过这种方式获取出来
-            Object.getOwnPropertyNames(form.elements).forEach(function (name) {
+            Object.getOwnPropertyNames(form.elements).forEach(function(name) {
                 if (name.startsWith('balh_')) {
                     var key = name.replace('balh_', '')
                     var ele = form.elements[name]
@@ -2242,7 +2326,7 @@ function scriptSource(invokeBy) {
             }
         }
 
-        var settingsDOM = _('div', { id: 'balh-settings', style: { position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,.7)', animationName: 'balh-settings-bg', animationDuration: '.5s', zIndex: 10000, cursor: 'pointer' }, event: { click: function (e) { if (e.target === this) util_ui_msg.close(), document.body.style.overflow = '', this.remove(); } } }, [
+        var settingsDOM = _('div', { id: 'balh-settings', style: { position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,.7)', animationName: 'balh-settings-bg', animationDuration: '.5s', zIndex: 10000, cursor: 'pointer' }, event: { click: function(e) { if (e.target === this) util_ui_msg.close(), document.body.style.overflow = '', this.remove(); } } }, [
             _('style', {}, [_('text', r.css.settings)]),
             _('div', { style: { position: 'absolute', background: '#FFF', borderRadius: '10px', padding: '20px', top: '50%', left: '50%', width: '600px', transform: 'translate(-50%,-50%)', cursor: 'default' } }, [
                 _('h1', {}, [_('text', `${GM_info.script.name} v${GM_info.script.version} 参数设置`)]),
@@ -2261,22 +2345,22 @@ function scriptSource(invokeBy) {
                         _('select', {
                             id: 'upos-server',
                             event: {
-                                change: function () {
+                                change: function() {
                                     let server = this.value;
                                     let message = $('#upos-server-message');
-                                    let clearMsg = function () { message.text('') }
+                                    let clearMsg = function() { message.text('') }
                                     message.text('保存中...')
                                     $.ajax(balh_config.server + '/api/setUposServer?server=' + server, {
                                         xhrFields: { withCredentials: true },
                                         dataType: 'json',
-                                        success: function (json) {
+                                        success: function(json) {
                                             if (json.code == 0) {
                                                 message.text('已保存');
                                                 setTimeout(clearMsg, 3e3);
                                                 balh_config.upos_server = server;
                                             }
                                         },
-                                        error: function () {
+                                        error: function() {
                                             message.text('保存出错');
                                             setTimeout(clearMsg, 3e3);
                                         }
@@ -2284,13 +2368,13 @@ function scriptSource(invokeBy) {
                                 }
                             }
                         }, [
-                                _('option', { value: "" }, [_('text', '不替换')]),
-                                _('option', { value: "ks3" }, [_('text', 'ks3（金山）')]),
-                                _('option', { value: "oss" }, [_('text', 'oss（阿里）')]),
-                                _('option', { value: "kodo" }, [_('text', 'kodo（七牛）')]),
-                                _('option', { value: "cos" }, [_('text', 'cos（腾讯）')]),
-                                _('option', { value: "bos" }, [_('text', 'bos（百度）')])
-                            ]),
+                            _('option', { value: "" }, [_('text', '不替换')]),
+                            _('option', { value: "ks3" }, [_('text', 'ks3（金山）')]),
+                            _('option', { value: "oss" }, [_('text', 'oss（阿里）')]),
+                            _('option', { value: "kodo" }, [_('text', 'kodo（七牛）')]),
+                            _('option', { value: "cos" }, [_('text', 'cos（腾讯）')]),
+                            _('option', { value: "bos" }, [_('text', 'bos（百度）')])
+                        ]),
                         _('span', { 'id': 'upos-server-message' })
                     ]), _('br'),
                     _('text', '脚本工作模式：'), _('br'),
@@ -2312,7 +2396,7 @@ function scriptSource(invokeBy) {
                     _('text', '　'),
                     _('a', { href: 'javascript:', 'data-sign': 'out', event: { click: onSignClick } }, [_('text', '取消授权')]),
                     _('text', '　　'),
-                    _('a', { href: 'javascript:', event: { click: function () { util_ui_msg.show($(this), '如果你的帐号进行了付费，不论是大会员还是承包，\n进行授权之后将可以在解除限制时正常享有这些权益\n\n你可以随时在这里授权或取消授权\n\n不进行授权不会影响脚本的正常使用，但可能会缺失1080P', 1e4); } } }, [_('text', '（这是什么？）')]),
+                    _('a', { href: 'javascript:', event: { click: function() { util_ui_msg.show($(this), '如果你的帐号进行了付费，不论是大会员还是承包，\n进行授权之后将可以在解除限制时正常享有这些权益\n\n你可以随时在这里授权或取消授权\n\n不进行授权不会影响脚本的正常使用，但可能会缺失1080P', 1e4); } } }, [_('text', '（这是什么？）')]),
                     _('br'), _('br'),
                     _('div', { style: { whiteSpace: 'pre-wrap' }, event: { mouseenter: onMouseEnterSettingBottom } }, [
                         _('a', { href: 'https://greasyfork.org/zh-CN/scripts/25718-%E8%A7%A3%E9%99%A4b%E7%AB%99%E5%8C%BA%E5%9F%9F%E9%99%90%E5%88%B6', target: '_blank' }, [_('text', '脚本主页')]),
@@ -2356,17 +2440,17 @@ function scriptSource(invokeBy) {
         )
         // 暴露接口
         window.bangumi_area_limit_hack = {
-            setCookie: util_cookie.set,
-            getCookie: util_cookie.get,
+            setStorage: util_storage.set,
+            getStorage: util_storage.get,
             login: balh_feature_sign.showLogin,
             logout: balh_feature_sign.showLogout,
             getAllMsg: util_log_hub.getAllMsg,
-            _clear_local_value: function () {
-                delete localStorage.oauthTime
-                delete localStorage.balh_h5_not_first
-                delete localStorage.balh_old_isLoginBiliBili
-                delete localStorage.balh_must_remind_login_v1
-                delete localStorage.balh_must_updateLoginFlag
+            _clear_local_value: function() {
+                localStorage.oauthTime = null;
+                localStorage.balh_h5_not_first = null;
+                localStorage.balh_old_isLoginBiliBili = null;
+                localStorage.balh_must_remind_login_v1 = null;
+                localStorage.balh_must_updateLoginFlag = null;
             }
         }
     }
@@ -2375,3 +2459,52 @@ function scriptSource(invokeBy) {
 }
 
 scriptSource(GM_info.scriptHandler);
+
+/*const util_cookie = (function () {
+    function getCookies() {
+        var map = document.cookie.split('; ').reduce(function (obj, item) {
+            var entry = item.split('=');
+            obj[entry[0]] = entry[1];
+            return obj;
+        }, {});
+        return map;
+    }
+
+    function getCookie(key) {
+        return getCookies()[key];
+    }*/
+
+/**
+ * @param key     key
+ * @param value   为undefined时, 表示删除cookie
+ * @param options 为undefined时, 表示过期时间为3年
+ *          为''时, 表示Session cookie
+ *          为数字时, 表示指定过期时间
+ *          为{}时, 表示指定所有的属性
+ * */
+/*function setCookie(key, value, options) {
+            if (typeof options !== 'object') {
+                options = {
+                    domain: '.bilibili.com',
+                    path: '/',
+                    'max-age': value === undefined ? 0 : (options === undefined ? 94608000 : options)
+                };
+            }
+            var c = Object.keys(options).reduce(function (str, key) {
+                return str + '; ' + key + '=' + options[key];
+            }, key + '=' + value);
+            document.cookie = c;
+            return c;
+        }
+
+        return new Proxy({ set: setCookie, get: getCookie, all: getCookies }, {
+            get: function (target, prop) {
+                if (prop in target) return target[prop]
+                return getCookie(prop)
+            },
+            set: function (target, prop, value) {
+                setCookie(prop, value)
+                return true
+            }
+        })
+    }())*/
