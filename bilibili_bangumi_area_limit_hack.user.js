@@ -2412,14 +2412,15 @@ function scriptSource(invokeBy) {
                 ])
             ])
         ]);
-
-        util_init(() => {
+		// 不显示设置按钮,免得可能被探测到
+        /*util_init(() => {
             if (!(util_page.player() || (util_page.av() && !balh_config.enable_in_av))) {
                 if (!util_page.av()) { // av页面添加这个按钮不知道为啥页面会混乱...屏蔽掉(;¬_¬)
                     addSettingsButton()
                 }
             }
-        }, util_init.PRIORITY.DEFAULT, util_init.RUN_AT.DOM_LOADED_AFTER)
+        }, util_init.PRIORITY.DEFAULT, util_init.RUN_AT.DOM_LOADED_AFTER)*/
+
         return {
             dom: settingsDOM,
             show: showSettings,
