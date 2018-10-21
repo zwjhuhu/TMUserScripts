@@ -468,10 +468,10 @@ function scriptSource(invokeBy) {
         let div = _('div', { id: 'AHP_Notice' });
         let childs = [];
         if (param.showConfirm || param.confirmBtn || param.onConfirm) {
-            childs.push(_('input', { value: param.confirmBtn || _t('ok'), type: 'button', className: 'confirm', event: { click: param.onConfirm } }));
+            childs.push(_('input', { value: param.confirmBtn || 'ok', type: 'button', className: 'confirm', event: { click: param.onConfirm } }));
         }
         childs.push(_('input', {
-            value: _t('close'),
+            value: 'close',
             type: 'button',
             className: 'close',
             event: {
@@ -503,6 +503,167 @@ function scriptSource(invokeBy) {
         anime_ep: () => location.href.includes('www.bilibili.com/bangumi/play/ep'),
         anime_ss: () => location.href.includes('www.bilibili.com/bangumi/play/ss')
     };
+
+
+    const util_flvplayer = (function(flvjs){
+        if(!flvjs){
+            return null;
+        }
+
+        let mediaSourceInfos = null;
+        let mediaDataSource = null;
+        let videoElement = null;
+        let player = null;
+
+        function parseFlvplayerSources(json) {
+            if (json.code) {
+                util_log('fetch play url code error', json);
+                return null;
+            } else {
+                if (!json.durl || !json.durl.length) {
+                    util_log('no play url found', json);
+                    return null;
+                }
+            }
+            let ret = {};
+            ret.accept_format = json.accept_format;
+            ret.accept_quality = json.accept_quality;
+            ret.accept_description = json.accept_description;
+            ret.durl = json.durl;
+            let mds = {};
+            mds.url = json.durl[0].url;
+            mds.duration = json.durl[0].length;
+            mds.filesize = json.durl[0].size;
+            mds.type = 'flv';
+            mediaDataSource = mds;
+            return ret;
+        }
+
+        function swtichUrl(url) {
+            if (mediaDataSource.url == url) {
+                return;
+            }
+            mediaDataSource.url = url;
+            if (player) {
+                flv_destroy();
+            }
+            let lastTime = videoElement.currentTime;
+            player = flvjs.createPlayer(mediaDataSource, {
+                enableWorker: false,
+                lazyLoadMaxDuration: 3 * 60,
+                seekType: 'range',
+                fixAudioTimestampGap: false
+            });
+            player.attachMediaElement(videoElement);
+            player.load();
+            if (lastTime > 0) {
+                player.pause();
+                videoElement.currentTime = lastTime;
+            }
+            player.play();
+        }
+
+        function createMediaInfoSel(durls) {
+            let len = durls.length;
+            if (len < 1) {
+                return null;
+            }
+            let allSubs = [];
+            let span = _('span', { style: { display: 'inline-block' } }, '质量:');
+            allSubs.push(span);
+            let subElems = durls.reduce(function(subElems, durl, index) {
+                let quqlOptions = subElems.quqlOptions;
+                let backSels = subElems.backSels;
+                quqlOptions.push(_('option', { value: durl.url, title: durl.url }, '大小: ' + (durl.size / 1e6).toFixed(2) + 'MB'));
+                if (durl.backup_url) {
+
+                    let backops = durl.backup_url.reduce(function(sub, backUrl, ids) {
+                        sub.push(_('option', { value: backUrl, title: backUrl }, '备用' + (ids + 1)));
+                        return sub;
+                    }, []);
+                    let backSel = _('select', {
+                        style: { display: 'none', width: '500px' },
+                        name: 'backurl_' + index,
+                        event: { change: function(e) { swtichUrl(e.target.value); } }
+                    }, backops);
+                    backSels[index] = backSel;
+                }
+
+                return subElems;
+            }, { quqlOptions: [], backSels: {} });
+            let qualSel = _('select', {
+                style: { display: 'inline-block', width: '200px' },
+                event: {
+                    change: function(e) {
+                        swtichUrl(e.target.value);
+                    }
+                }
+            }, subElems.quqlOptions);
+            allSubs.push(qualSel);
+            span = _('span', { style: { display: 'inline-block' } }, '备用:');
+            allSubs.push(span);
+            for (let k in subElems.backSels) {
+                allSubs.push(subElems.backSels[k]);
+            }
+            return allSubs;
+        }
+
+        function createFlvplayerWithUrls(json) {
+            mediaSourceInfos = parseFlvplayerSources(json);
+            if (!mediaSourceInfos || !mediaDataSource) {
+                return;
+            }
+            let container = $('#bofqi');
+            if(!container.length){
+                container = $('.error-body');
+            }else{
+                container.css('display','block');
+                container.parent().find('.player-limit-wrap').remove();
+                $('.bangumi-player').css('background', 'inherit');
+            }
+            if(container.length){
+                container.text('');
+                container.css('width','1280px').css('height','960px').css('margin','auto');
+            }else{
+                util_error('no place to create flvplayer');
+                return;
+            }
+            videoElement = _('video', { style: { width: '100%' }, controls: true });
+            let mediaInfoContainer = _('div', { style: { width: '100%', height: '50px' } }, createMediaInfoSel(mediaSourceInfos.durl));
+
+
+            container.append(videoElement);
+            container.append(mediaInfoContainer);
+            if (player) {
+                flv_destroy();
+            }
+            player = flvjs.createPlayer(mediaDataSource, {
+                enableWorker: false,
+                lazyLoadMaxDuration: 3 * 60,
+                seekType: 'range',
+                fixAudioTimestampGap: false
+            });
+            player.attachMediaElement(videoElement);
+            player.load();
+        };
+
+        function flv_destroy() {
+            if(!player){
+                return;
+            }
+            player.pause();
+            player.unload();
+            player.detachMediaElement();
+            player.destroy();
+            player = null;
+        }
+
+        return {
+            createFlvplayerWithUrls: createFlvplayerWithUrls,
+            getPlayer: function(){return player;}
+        };
+
+    })(window.flvjs);
 
     const balh_api_plus_view = function(aid, update = true) {
         return util_ajax(`${balh_config.server}/api/view?id=${aid}&update=${update}`)
@@ -613,7 +774,7 @@ function scriptSource(invokeBy) {
                                                 .then(r => {
                                                 container.readyState = 4
                                                 container.response = r
-                                                container.__onreadystatechange(evnet) // 直接调用会不会存在this指向错误的问题? => 目前没看到, 先这样(;¬_¬)
+                                                container.__onreadystatechange(event) // 直接调用会不会存在this指向错误的问题? => 目前没看到, 先这样(;¬_¬)
                                             })
                                                 .catch(e => {
                                                 // 失败时, 让原始的response可以交付
@@ -929,7 +1090,7 @@ function scriptSource(invokeBy) {
             BilibiliApi.prototype.asyncAjax = function(originUrl) {
                 return util_ajax(this.transToProxyUrl(originUrl))
                     .then(r => this.processProxySuccess(r))
-                    .compose(util_ui_msg.showOnNetErrorInPromise()) // 出错时, 提示服务器连不上
+                    .catch(e => util_error(e));
             }
             var get_source_by_aid = new BilibiliApi({
                 transToProxyUrl: function(url) {
@@ -1064,7 +1225,7 @@ function scriptSource(invokeBy) {
                         return Promise.reject(e);
                     })
                         .catch(e => {
-                        util_ui_alert(`拉取视频地址失败\n${util_stringify(e)}\n\n可以考虑进行如下尝试:\n1. 多刷新几下页面\n` +
+                        util_ui_alert(`拉取视频地址失败\n${JSON.stringify(e)}\n\n可以考虑进行如下尝试:\n1. 多刷新几下页面\n` +
                                       `2. 进入设置页面更换代理服务器\n3. 耐心等待代理服务器端修复问题\n\n点击确定按钮, 刷新页面`, window.location.reload.bind(window.location));
                         return Promise.reject(e);
                     })
@@ -1095,7 +1256,7 @@ function scriptSource(invokeBy) {
                             // 这里是故意转向injectAjax
                             $.ajax({
                                 url: url,
-                                success: createFlvplayerWithUrls,
+                                success: util_flvplayer.createFlvplayerWithUrls,
                                 error: util_func_noop
                             });
                         });
@@ -1131,146 +1292,8 @@ function scriptSource(invokeBy) {
             checkAreaLimitInfo();
         }
 
-
-        let mediaSourceInfos = null;
-        let mediaDataSource = null;
-        let videoElement = null;
-
-        function parseFlvplayerSources(json) {
-            if (json.code) {
-                util_log('fetch play url code error', json);
-                return null;
-            } else {
-                if (!json.durl || !json.durl.length) {
-                    util_log('no play url found', json);
-                    return null;
-                }
-            }
-            let ret = {};
-            ret.accept_format = json.accept_format;
-            ret.accept_quality = json.accept_quality;
-            ret.accept_description = json.accept_description;
-            ret.durl = json.durl;
-            let mds = {};
-            mds.url = json.durl[0].url;
-            mds.duration = json.durl[0].length;
-            mds.filesize = json.durl[0].size;
-            mds.type = 'flv';
-            mediaDataSource = mds;
-            return ret;
-        }
-
-        function swtichUrl(url) {
-            if (mediaDataSource.url == url) {
-                return;
-            }
-            mediaDataSource.url = url;
-            let player = window.flvplayer;
-            if (player) {
-                flv_destroy();
-            }
-            let lastTime = videoElement.currentTime;
-            player = flvjs.createPlayer(mediaDataSource, {
-                enableWorker: false,
-                lazyLoadMaxDuration: 3 * 60,
-                seekType: 'range',
-                fixAudioTimestampGap: false
-            });
-            player.attachMediaElement(videoElement);
-            player.load();
-            if (lastTime > 0) {
-                player.pause();
-                videoElement.currentTime = lastTime;
-            }
-            player.play();
-            window.flvplayer = player;
-
-        }
-
-        function createMediaInfoSel(durls) {
-            let len = durls.length;
-            if (len < 1) {
-                return null;
-            }
-            let allSubs = [];
-            let span = _('span', { style: { display: 'inline-block' } }, '质量:');
-            allSubs.push(span);
-            let subElems = durls.reduce(function(subElems, durl, index) {
-                let quqlOptions = subElems.quqlOptions;
-                let backSels = subElems.backSels;
-                quqlOptions.push(_('option', { value: durl.url, title: durl.url }, '大小: ' + (durl.size / 1e6).toFixed(2) + 'MB'));
-                if (durl.backup_url) {
-
-                    let backops = durl.backup_url.reduce(function(sub, backUrl, ids) {
-                        sub.push(_('option', { value: backUrl, title: backUrl }, '备用' + (i + 1)));
-                        return sub;
-                    }, []);
-                    let backSel = _('select', {
-                        style: { display: 'none', width: '500px' },
-                        name: 'backurl_' + index,
-                        event: { change: function(e) { swtichUrl(e.target.value); } }
-                    }, backops);
-                    backSels[index] = backSel;
-                }
-
-                return subElems;
-            }, { quqlOptions: [], backSels: {} });
-            let qualSel = _('select', {
-                style: { display: 'inline-block', width: '200px' },
-                event: {
-                    change: function(e) {
-                        swtichUrl(e.target.value);
-                    }
-                }
-            }, subElems.quqlOptions);
-            allSubs.push(qualSel);
-            span = _('span', { style: { display: 'inline-block' } }, '备用:');
-            allSubs.push(span);
-            for (let k in subElems.backSels) {
-                allSubs.push(subElems.backSels[k]);
-            }
-            return allSubs;
-        }
-
-        const createFlvplayerWithUrls = function(json) {
-            mediaSourceInfos = parseFlvplayerSources(json);
-            if (!mediaSourceInfos || !mediaDataSource) {
-                return;
-            }
-            videoElement = _('video', { style: { width: '100%' }, controls: true });
-            //for(let i=0;i<)
-            let mediaInfoContainer = _('div', { style: { width: '100%', height: '50px' } }, createMediaInfoSel(mediaSourceInfos.durl));
-            let container = $('#bofqi').css('display','block');
-            container.parent().find('.player-limit-wrap').remove();
-            $('.bangumi-player').css('background', 'inherit');
-
-            container.append(videoElement);
-            container.append(mediaInfoContainer);
-            let player = window.flvplayer;
-            if (player) {
-                flv_destroy();
-            }
-            player = flvjs.createPlayer(mediaDataSource, {
-                enableWorker: false,
-                lazyLoadMaxDuration: 3 * 60,
-                seekType: 'range',
-                fixAudioTimestampGap: false
-            });
-            player.attachMediaElement(videoElement);
-            player.load();
-            window.flvplayer = player;
-        };
-
-        function flv_destroy() {
-            let player = window.flvplayer;
-            player.pause();
-            player.unload();
-            player.detachMediaElement();
-            player.destroy();
-            window.player = null;
-        }
-
     }());
+
 
     const balh_feature_runPing = function() {
 
@@ -1332,53 +1355,19 @@ function scriptSource(invokeBy) {
                         break;
                     }
                 }
-                if (!data.bangumi) {
-                    generatePlayer(data, aid, page, cid)
-                    // return Promise.reject('该AV号不属于任何番剧页');//No bangumi in api response
-                } else {
-                    // 当前av属于番剧页面, 继续处理
-                    season_id = data.bangumi.season_id;
-                    return balh_api_plus_season(season_id);
+                if(!cid){
+                    return Promise.reject('cid is missing' + JSON.stringify(data));
                 }
-            })
-                .then(function(result) {
-                if (result === undefined) return // 上一个then不返回内容时, 不需要处理
-                if (result.code === 10) { // av属于番剧页面, 通过接口却未能找到番剧信息
-                    let ep_id_newest = avData && avData.bangumi && avData.bangumi.newest_ep_id
-                    if (ep_id_newest) {
-                        episode_id = ep_id_newest // 此时, 若avData中有最新的ep_id, 则直接使用它
-                    } else {
-                        return Promise.reject(`av${aid}属于番剧${season_id}, 但却不能找到番剧页的信息, 试图直接创建播放器`);
-                    }
-                } else if (result.code) {
-                    return Promise.reject(JSON.stringify(result))
-                } else {
-                    let ep_id_by_cid, ep_id_by_aid_page, ep_id_by_aid,
-                        episodes = result.result.episodes,
-                        ep
-                    // 为何要用三种不同方式匹配, 详见: https://greasyfork.org/zh-CN/forum/discussion/22379/x#Comment_34127
-                    for (let i = 0; i < episodes.length; i++) {
-                        ep = episodes[i]
-                        if (ep.danmaku == cid) {
-                            ep_id_by_cid = ep.episode_id
-                        }
-                        if (ep.av_id == aid && ep.page == page) {
-                            ep_id_by_aid_page = ep.episode_id
-                        }
-                        if (ep.av_id == aid) {
-                            ep_id_by_aid = ep.episode_id
-                        }
-                    }
-                    episode_id = ep_id_by_cid || ep_id_by_aid_page || ep_id_by_aid
-                }
-                if (episode_id) {
-                    let bangumi_url = `//www.bilibili.com/bangumi/play/ep${episode_id}`;
-                    log('Redirect', 'aid:', aid, 'page:', page, 'cid:', cid, '==>', bangumi_url, 'season_id:', season_id, 'ep_id:', episode_id)
-                    msg.innerText = '即将跳转到：' + bangumi_url
-                    location.href = bangumi_url
-                } else {
-                    return Promise.reject('查询episode_id失败')
-                }
+                // 有cid直接生成播放器
+                biliplayurl(cid, { season_type: 1, quality: 80 }).then(function(url) {
+                    // 这里是故意转向injectAjax
+                    $.ajax({
+                        url: url,
+                        success: util_flvplayer.createFlvplayerWithUrls,
+                        error: util_func_noop
+                    });
+                });
+
             })
                 .catch(function(e) {
                 log('error:', arguments);
@@ -1399,7 +1388,8 @@ function scriptSource(invokeBy) {
         setStorage: util_storage.set,
         getStorage: util_storage.get,
         clearStorage: util_storage.clear,
-        serverPing: balh_feature_runPing
+        serverPing: balh_feature_runPing,
+        flvplayer: util_flvplayer.getPlayer
     }
 
 
