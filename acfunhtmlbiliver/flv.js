@@ -5868,12 +5868,16 @@ function boxInfo(uintarr, index) {
         boxHeadSize = 16;
     }
     var fullyLoaded = uintarr.length >= index + boxSize;
-    if (boxSize == 0) return {
-        size: 8,
-        headSize: boxHeadSize,
-        name: '',
-        fullyLoaded: true
-    };
+    if (boxSize === 0 && boxName !== 'mdat') {
+        // mdat size 0 may mean just read util file end
+        return {
+            size: 8,
+            headSize: boxHeadSize,
+            name: '',
+            fullyLoaded: true
+        };
+    }
+
     return {
         size: boxSize,
         headSize: boxHeadSize,
@@ -5965,9 +5969,14 @@ var MP4Demuxer = function () {
         this._dataOffset = probeData.dataOffset;
         this._firstParse = true;
         this._dispatch = false;
+        this._mediaDataEnd = 0;
         this._mdatEnd = 0;
 
-        // cache next demux start position 
+        this._moovNeedSeek = false; // in some file moov may placed after mdat box
+        this._moovPosition = -1;
+        this._resumePosition = 0;
+
+        // cache next demux start position
         this._lastChunkOffet = 0;
         this._lastSampleIndex = 0;
         this._proccessedByte = -1; // init with nonzero for search method run first time when mdat comes with byteStart eqaul to zero
@@ -5997,17 +6006,7 @@ var MP4Demuxer = function () {
             fps_den: 1000
         };
 
-        this._flvSoundRateTable = [5500, 11025, 22050, 44100, 48000];
-
         this._mpegSamplingRates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
-
-        this._mpegAudioV10SampleRateTable = [44100, 48000, 32000, 0];
-        this._mpegAudioV20SampleRateTable = [22050, 24000, 16000, 0];
-        this._mpegAudioV25SampleRateTable = [11025, 12000, 8000, 0];
-
-        this._mpegAudioL1BitRateTable = [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, -1];
-        this._mpegAudioL2BitRateTable = [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, -1];
-        this._mpegAudioL3BitRateTable = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, -1];
 
         this._videoTrack = { type: 'video', id: 1, sequenceNumber: 0, samples: [], length: 0 };
         this._audioTrack = { type: 'audio', id: 2, sequenceNumber: 0, samples: [], length: 0 };
@@ -6381,10 +6380,10 @@ var MP4Demuxer = function () {
                                 {
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 12, box.size - 12);
                                     var _entryCount6 = ReadBig32(body, 0);
-                                    var _sampleTable6 = [];
+                                    var _sampleTable6 = new Float64Array(_entryCount6);
                                     var _boxOffset7 = 4;
                                     for (var _i8 = 0; _i8 < _entryCount6; _i8++) {
-                                        _sampleTable6.push(ReadBig64(body, _boxOffset7));
+                                        _sampleTable6[_i8] = ReadBig64(body, _boxOffset7);
                                         _boxOffset7 += 8;
                                     }
                                     parent['stco'] = _sampleTable6;
@@ -6466,7 +6465,7 @@ var MP4Demuxer = function () {
                 sampleTsMap.video = [];
                 for (var _i9 = 0; _i9 < stts.length; _i9++) {
                     for (var j = 0; j < stts[_i9].sampleCount; j++) {
-                        var time = sampleTs / timeScale | 0;
+                        var time = Math.floor(sampleTs / timeScale);
                         maxDuration = Math.max(time, maxDuration);
                         if (!bitrateMapTrack.video[time]) {
                             bitrateMapTrack.video[time] = 0;
@@ -6572,7 +6571,43 @@ var MP4Demuxer = function () {
                 meta.codec = mediaInfo.videoCodec;
                 meta.codecHeight = sps.codec_size.height;
                 meta.codecWidth = sps.codec_size.width;
-                meta.duration = this._duration / 1e3 * timeScale | 0;
+                meta.duration = Math.floor(this._duration / 1e3 * timeScale);
+                /**
+                 * avoid total duration overflow
+                 * video reference: http://www.acfun.cn/v/ac4376294
+                 * timeScale: 6286213
+                 * total duration 1491s represented as 9372743583 or 0x2,2EA8B79F
+                 * but moov box is uint32, duration became 0x2EA8B79F or 782808991, which is 124.5279s
+                 */
+                if (meta.duration > 0xffffffff) {
+                    var newDuration = meta.duration;
+                    var newTimeScale = timeScale;
+                    var factor = 2;
+                    while (newDuration > 0xffffffff && factor < timeScale / 2) {
+                        if (newTimeScale % factor == 0) {
+                            newTimeScale /= factor;
+                            newDuration = Math.floor(this._duration / 1e3 * newTimeScale);
+                        } else {
+                            factor += 1;
+                        }
+                    }
+                    // no prime factor found, force timeScale 1000
+                    if (newDuration > 0xffffffff) {
+                        newTimeScale = 1000;
+                        newDuration = this._duration;
+                    }
+                    factor = timeScale / newTimeScale;
+                    _logger2.default.w(this.TAG, 'Huge timeScale causing duration overflow, reducing from ' + timeScale + ' to ' + newTimeScale);
+                    chunkMap.video.forEach(function (i) {
+                        i.samples.forEach(function (i) {
+                            i.ts /= factor;
+                            i.duration /= factor;
+                            i.cts /= factor;
+                        });
+                    });
+                    meta.duration = newDuration;
+                    timeScale = newTimeScale;
+                }
                 meta.timescale = timeScale;
                 meta.frameRate = sps.frame_rate;
                 meta.id = id++;
@@ -6605,7 +6640,7 @@ var MP4Demuxer = function () {
                 sampleTsMap.audio = [];
                 for (var _i11 = 0; _i11 < _stts.length; _i11++) {
                     for (var _j2 = 0; _j2 < _stts[_i11].sampleCount; _j2++) {
-                        var _time = _sampleTs / _timeScale2 | 0;
+                        var _time = Math.floor(_sampleTs / _timeScale2);
                         maxDuration = Math.max(_time, maxDuration);
                         if (!bitrateMapTrack.audio[_time]) {
                             bitrateMapTrack.audio[_time] = 0;
@@ -6656,7 +6691,7 @@ var MP4Demuxer = function () {
                 _meta.codec = mediaInfo.audioCodec;
                 _meta.originalCodec = _meta.codec;
                 _meta.config = specDesc.data;
-                _meta.duration = this._duration / 1e3 * _timeScale2 | 0;
+                _meta.duration = Math.floor(this._duration / 1e3 * _timeScale2);
                 _meta.id = id++;
                 _meta.refSampleDuration = 1024 / _meta.audioSampleRate * _timeScale2;
                 _meta.timescale = _timeScale2;
@@ -6690,6 +6725,13 @@ var MP4Demuxer = function () {
             mergedChunkMap = mergedChunkMap.sort(function (a, b) {
                 return a.offset - b.offset;
             });
+            //find media data end position
+            if (mergedChunkMap.length > 0) {
+                var lastChunk = mergedChunkMap[mergedChunkMap.length - 1];
+                this._mediaDataEnd = lastChunk.offset + lastChunk.samples.reduce(function (sum, item) {
+                    return sum + item.size;
+                }, 0);
+            }
             this._chunkMap = mergedChunkMap;
             this._mediaInfo = mediaInfo;
             if (mediaInfo.isComplete()) this._onMediaInfo(mediaInfo);
@@ -6744,15 +6786,23 @@ var MP4Demuxer = function () {
                 // buffer with header
                 var probeData = MP4Demuxer.probe(chunk);
                 offset = probeData.dataOffset;
-                if (!probeData.enoughData) {
+                if (!probeData.enoughData && !probeData.moovSeekInfo) {
                     return 0;
+                }
+
+                if (probeData.moovSeekInfo && probeData.moovSeekInfo.position) {
+                    this._moovNeedSeek = true;
+                    this._resumePosition = byteStart + offset + probeData.moovSeekInfo.headerSize;
+                    this._mdatEnd = probeData.moovSeekInfo.position;
+                    this._moovPosition = probeData.moovSeekInfo.position;
+                    return this._moovPosition - byteStart;
                 }
             }
 
             if (this._firstParse) {
                 // parse moov box
 
-                if (byteStart + offset !== this._dataOffset) {
+                if (byteStart + offset !== this._dataOffset && !this._moovNeedSeek) {
                     _logger2.default.w(this.TAG, 'First time parsing but chunk byteStart invalid!');
                 }
 
@@ -6762,19 +6812,28 @@ var MP4Demuxer = function () {
                 if (!moov.fullyLoaded) {
                     return 0;
                 }
-                var moovData = new Uint8Array(chunk, byteStart + offset, moov.size);
+                if (this._moovNeedSeek && this._moovPosition == byteStart + offset) {
+                    _logger2.default.i(this.TAG, 'try parse moov box which is placed after mdat box');
+                }
+
+                var moovData = new Uint8Array(chunk, offset, moov.size);
                 this._parseMoov(moovData);
                 offset += moov.size;
                 this._firstParse = false;
+                if (this._moovNeedSeek) {
+                    this._moovNeedSeek = false;
+                    return this._resumePosition - byteStart;
+                }
             }
 
             //try parse 'mdat' box
             while (this._mdatEnd === 0) {
                 var v = new Uint8Array(chunk, offset);
                 var box = boxInfo(v, 0);
-                if (box.name == 'mdat') {
+                if (box.name === 'mdat') {
                     this._mdatEnd = byteStart + offset + box.size;
                     offset += box.headSize;
+                    break;
                 } else {
                     if (box.fullyLoaded) {
                         //not mdat box, skip
@@ -6787,8 +6846,7 @@ var MP4Demuxer = function () {
                 }
             }
 
-            //mdat data ended just skip left bytes
-            if (byteStart + offset >= this._mdatEnd) {
+            if (byteStart + offset >= this._mediaDataEnd) {
                 this._proccessedByte = byteStart + chunk.byteLength;
                 return chunk.byteLength;
             }
@@ -6800,7 +6858,7 @@ var MP4Demuxer = function () {
             var sampleIndex = -1;
             var dataChunk = null;
             if (this._proccessedByte != byteStart) {
-                // seek or some unexpected situation happen should recaculate 
+                // seek or some unexpected situation happen should recaculate
                 var bottom = this._proccessedByte < byteStart ? this._lastChunkOffet : 0;
                 var top = this._proccessedByte > byteStart ? this._lastChunkOffet : chunkMap.length;
                 // bi search first chunk
@@ -6821,7 +6879,22 @@ var MP4Demuxer = function () {
                 dataChunk = chunkMap[chunkOffset];
 
                 if (!dataChunk) {
-                    throw new _exception.IllegalStateException('search first chunk fail for sampleOffset ' + sampleOffset + ' get chunkOffset ' + chunkOffset);
+                    if (sampleOffset < chunkMap[0].offset) {
+                        chunkOffset = 0;
+                        dataChunk = chunkMap[chunkOffset];
+                        var expectedOffset = dataChunk.offset;
+                        if (byteStart + chunk.byteLength >= dataChunk.offset) {
+                            var skipBytes = expectedOffset - sampleOffset;
+                            offset += skipBytes;
+                            sampleOffset += skipBytes;
+                            _logger2.default.w(this.TAG, 'mdat data not just start from the first sample skip unused bytes ' + skipBytes);
+                        } else {
+                            // data not enough
+                            return chunk.byteLength;
+                        }
+                    } else {
+                        throw new _exception.IllegalStateException('search first chunk fail for sampleOffset ' + sampleOffset + ' get chunkOffset ' + chunkOffset);
+                    }
                 }
 
                 //find sample index in target chunk
@@ -6830,12 +6903,12 @@ var MP4Demuxer = function () {
                     sampleIndex++;
                 }
                 if (sampleOffset < 0 && sampleIndex < dataChunk.samples.length) {
-                    // sampleOffset is not a sample's start position maybe a error but for now try to skip to next sample  
-                    var skipBytes = -sampleOffset;
+                    // sampleOffset is not a sample's start position maybe a error but for now try to skip to next sample
+                    var _skipBytes = -sampleOffset;
 
-                    if (offset + skipBytes <= chunk.byteLength) {
-                        offset += skipBytes;
-                        _logger2.default.w(this.TAG, 'sampleOffset ' + (byteStart + offset) + ' is not a sample\'s start position try skip ' + skipBytes + ' bytes ' + ('make postion to chunk #' + chunkOffset + ' (type: ' + dataChunk.type + ') with sampleIndex ' + sampleIndex));
+                    if (offset + _skipBytes <= chunk.byteLength) {
+                        offset += _skipBytes;
+                        _logger2.default.w(this.TAG, 'sampleOffset ' + (byteStart + offset) + ' is not a sample\'s start position try skip ' + _skipBytes + ' bytes ' + ('make postion to chunk #' + chunkOffset + ' (type: ' + dataChunk.type + ') with sampleIndex ' + sampleIndex));
                     } else {
                         // wait for next data come
                         this._proccessedByte = byteStart + sampleOffset; //next time should search sampleIndex again so just set _proccessedByte less than byteStart
@@ -6907,7 +6980,7 @@ var MP4Demuxer = function () {
             this._lastSampleIndex = sampleIndex;
             this._proccessedByte = byteStart + offset;
 
-            // consumed bytes, just equals latest offset index 
+            // consumed bytes, just equals latest offset index
             // !! It MUST NOT be greater than chunk.byteLength otherwise iocontroller will give wrong data next time
             return offset;
         }
@@ -7055,12 +7128,18 @@ var MP4Demuxer = function () {
 
             //skip all non-moov box until stream ends
             while (box.fullyLoaded) {
-                if (box.name == 'moov') break;
+                if (box.name == 'moov' || box.name == 'mdat') break;
                 offset += box.size;
                 box = boxInfo(data, offset);
             }
-            //no moov found in file header, not supported at this time
-            if (box.name != 'moov') {
+
+            var moovSeekInfo = null;
+            if (box.name === 'mdat') {
+                //no moov found in file header need inital seek
+                moovSeekInfo = { position: offset + box.size, headerSize: box.headSize };
+            } else if (box.name === 'moov') {
+                moovSeekInfo = null;
+            } else {
                 return mismatch;
             }
 
@@ -7068,7 +7147,8 @@ var MP4Demuxer = function () {
                 match: true,
                 enoughData: box.fullyLoaded,
                 consumed: offset,
-                dataOffset: offset
+                dataOffset: offset,
+                moovSeekInfo: moovSeekInfo
             };
         }
     }]);
@@ -7894,7 +7974,7 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
  *     cors: boolean,
  *     withCredentials: boolean
  * }
- * 
+ *
  */
 
 // Manage IO Loaders
@@ -7950,6 +8030,8 @@ var IOController = function () {
         this._onComplete = null;
         this._onRedirect = null;
         this._onRecoveredEarlyEof = null;
+
+        this._dumexerSeekTriggered = false;
 
         this._selectSeekHandler();
         this._selectLoader();
@@ -8292,6 +8374,10 @@ var IOController = function () {
                         stashArray.set(new Uint8Array(chunk, consumed), 0);
                         this._stashUsed += remain;
                         this._stashByteStart = byteStart + consumed;
+                    } else {
+                        if (this._checkSeekTriggerByDemuxer(consumed, chunk.byteLength, byteStart)) {
+                            return;
+                        }
                     }
                 } else {
                     // else: Merge chunk into stashBuffer, and dispatch stashBuffer to consumer.
@@ -8306,6 +8392,10 @@ var IOController = function () {
                         // unconsumed data remain
                         var remainArray = new Uint8Array(this._stashBuffer, _consumed);
                         _stashArray.set(remainArray, 0);
+                    } else {
+                        if (this._checkSeekTriggerByDemuxer(_consumed, this._stashUsed, this._stashByteStart)) {
+                            return;
+                        }
                     }
                     this._stashUsed -= _consumed;
                     this._stashByteStart += _consumed;
@@ -8339,6 +8429,9 @@ var IOController = function () {
                                 this._stashByteStart += _consumed2;
                             }
                         } else {
+                            if (this._checkSeekTriggerByDemuxer(_consumed2, buffer.byteLength, this._stashByteStart)) {
+                                return;
+                            }
                             this._stashUsed = 0;
                             this._stashByteStart += _consumed2;
                         }
@@ -8361,10 +8454,41 @@ var IOController = function () {
                             _stashArray3.set(new Uint8Array(chunk, _consumed3), 0);
                             this._stashUsed += _remain;
                             this._stashByteStart = byteStart + _consumed3;
+                        } else {
+                            this._checkSeekTriggerByDemuxer(_consumed3, chunk.byteLength, byteStart);
                         }
                     }
                 }
             }
+        }
+
+        //experimental just for some file which indexes info is placed behind media datas
+
+    }, {
+        key: '_checkSeekTriggerByDemuxer',
+        value: function _checkSeekTriggerByDemuxer(consumed, chunkLen, byteStart) {
+            if (consumed >= 0 && consumed <= chunkLen) {
+                return false;
+            }
+            _logger2.default.w(this.TAG, 'experimental seek trigger by demuxer for read media index data offset ' + consumed + ' ' + ('last byteStart ' + byteStart + ' last chunkLen ' + chunkLen));
+            var bytes = byteStart + consumed;
+            this._stashUsed = 0;
+            this._stashByteStart = 0;
+
+            if (this._loader.isWorking()) {
+                this._loader.abort();
+            }
+
+            this._loader.destroy();
+            this._loader = null;
+
+            var requestRange = { from: bytes, to: -1 };
+            this._currentRange = { from: requestRange.from, to: -1 };
+
+            this._createLoader();
+            this._loader.open(this._dataSource, requestRange);
+            this._dumexerSeekTriggered = !this._dumexerSeekTriggered;
+            return true;
         }
     }, {
         key: '_flushStashBuffer',
@@ -8397,8 +8521,19 @@ var IOController = function () {
     }, {
         key: '_onLoaderComplete',
         value: function _onLoaderComplete(from, to) {
-            // Force-flush stash buffer, and drop unconsumed data
-            this._flushStashBuffer(true);
+
+            if (this._dumexerSeekTriggered) {
+                _logger2.default.w(this.TAG, 'file read to end but need forward it may trigged by dumexer');
+                if (this._stashUsed > 0) {
+                    var buffer = this._stashBuffer.slice(0, this._stashUsed);
+                    var consumed = this._dispatchChunks(buffer, this._stashByteStart);
+                    this._checkSeekTriggerByDemuxer(consumed, buffer.byteLength, this._stashByteStart);
+                }
+                return;
+            } else {
+                // Force-flush stash buffer, and drop unconsumed data
+                this._flushStashBuffer(true);
+            }
 
             if (this._onComplete) {
                 this._onComplete(this._extraData);
@@ -12509,7 +12644,7 @@ var MP4Remuxer = function () {
                 data: metabox.buffer,
                 codec: codec,
                 container: type + '/' + container,
-                mediaDuration: metadata.duration // in timescale 1000 (milliseconds)
+                mediaDuration: Math.floor(metadata.duration * 1000 / metadata.timescale) // in timescale 1000 (milliseconds)
             });
         }
     }, {
