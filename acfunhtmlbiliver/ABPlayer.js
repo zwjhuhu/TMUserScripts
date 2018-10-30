@@ -1285,6 +1285,7 @@ ABP.Strings={
                         if(div.style.opacity==1){
                             div.style.opacity=0;
                             dots.stopTimer();
+                            saveHistory();
                         }
                     break;
                 }
@@ -1314,7 +1315,7 @@ ABP.Strings={
                 if(history[cid]!=undefined)
                     ABPInst.lastTime=history[cid];
             }catch(e){}
-            window[addEventListener]('beforeunload',function(){saveHistory();return null;});
+            //window[addEventListener]('beforeunload',function(){saveHistory();return null;});
             ABPInst.playerUnit[addEventListener]('beforecidchange',function(){saveHistory();loadingNew=true;isEnded=false});
             video[addEventListener]('loop',function(){isLooping=video.loop});
             video[addEventListener]('canplay',autoPlay);
