@@ -12830,9 +12830,7 @@ var MP4Remuxer = function () {
 
                 var sampleDuration = 0;
 
-                if (_sample.duration !== undefined) {
-                    sampleDuration = _sample.duration;
-                } else if (i !== samples.length - 1) {
+                if (i !== samples.length - 1) {
                     var nextDts = samples[i + 1].dts - this._dtsBase - dtsCorrection;
                     sampleDuration = nextDts - _dts;
                 } else {
@@ -12848,6 +12846,11 @@ var MP4Remuxer = function () {
                         // the only one sample, use reference sample duration
                         sampleDuration = Math.floor(refSampleDuration);
                     }
+                }
+
+                if (sampleDuration < 1) {
+                    _logger2.default.w(this.TAG, 'irregular audio sampleDuration: ' + sampleDuration + ' may cause by non-increasing dts just use refSampleDuration ' + refSampleDuration);
+                    sampleDuration = Math.floor(refSampleDuration);
                 }
 
                 var needFillSilentFrames = false;
@@ -12965,7 +12968,6 @@ var MP4Remuxer = function () {
             info.endDts = lastDts;
             info.beginPts = firstDts;
             info.endPts = lastDts;
-            info.timeScale = this._audioMeta.timescale;
             info.originalBeginDts = mp4Samples[0].originalDts;
             info.originalEndDts = latest.originalDts + latest.duration;
             info.firstSample = new _mediaSegmentInfo.SampleInfo(mp4Samples[0].dts, mp4Samples[0].pts, mp4Samples[0].duration, mp4Samples[0].originalDts, false);
@@ -13098,9 +13100,7 @@ var MP4Remuxer = function () {
 
                 var sampleDuration = 0;
 
-                if (_sample2.duration !== undefined) {
-                    sampleDuration = _sample2.duration;
-                } else if (i !== samples.length - 1) {
+                if (i !== samples.length - 1) {
                     var nextDts = samples[i + 1].dts - this._dtsBase - dtsCorrection;
                     sampleDuration = nextDts - dts;
                 } else {
@@ -13118,14 +13118,9 @@ var MP4Remuxer = function () {
                     }
                 }
 
-                sampleDuration += dtsCorrection;
-                if (dtsCorrection > this._videoMeta.refSampleDuration * 1.5) {
-                    _logger2.default.w(this.TAG, 'Large video timestamp gap detected, ' + ('dts: ' + (dts + sampleDuration) + ' ms, expected: ' + (dts + Math.round(this._videoMeta.refSampleDuration)) + ' ms. '));
-                }
-                dtsCorrection = 0;
-                if (sampleDuration < 5) {
-                    dtsCorrection = sampleDuration - 5;
-                    sampleDuration = 5;
+                if (sampleDuration < 1) {
+                    _logger2.default.w(this.TAG, 'irregular video sampleDuration: ' + sampleDuration + ' may cause by non-increasing dts just use refSampleDuration ' + this._videoMeta.refSampleDuration);
+                    sampleDuration = Math.floor(this._videoMeta.refSampleDuration);
                 }
 
                 if (isKeyframe) {
@@ -13182,7 +13177,6 @@ var MP4Remuxer = function () {
             info.endDts = lastDts;
             info.beginPts = firstPts;
             info.endPts = lastPts;
-            info.timeScale = this._videoMeta.timescale;
             info.originalBeginDts = mp4Samples[0].originalDts;
             info.originalEndDts = latest.originalDts + latest.duration;
             info.firstSample = new _mediaSegmentInfo.SampleInfo(mp4Samples[0].dts, mp4Samples[0].pts, mp4Samples[0].duration, mp4Samples[0].originalDts, mp4Samples[0].isKeyframe);
