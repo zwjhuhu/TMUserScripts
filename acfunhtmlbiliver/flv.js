@@ -6072,9 +6072,11 @@ var MP4Demuxer = function () {
                                     nextID  4   96
                                     */
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 8, box.size - 8);
-                                    var timeScale = ReadBig32(body, 12);
-                                    var duration = ReadBig32(body, 16);
+                                    var version = body[0];
+                                    var timeScale = ReadBig32(body, version == 1 ? 20 : 12);
+                                    var duration = version == 1 ? ReadBig64(body, 24) : ReadBig32(body, 16);
                                     parent[box.name] = {
+                                        version: version,
                                         timeScale: timeScale,
                                         duration: duration
                                     };
@@ -6101,17 +6103,28 @@ var MP4Demuxer = function () {
                                     Theight 4   80
                                     */
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 8, box.size - 8);
+                                    var _version = body[0];
                                     var flags = {
                                         trackEnbaled: body[3] & 1,
                                         trackInMovie: (body[3] & 2) >> 1,
                                         trackInPreview: (body[3] & 4) >> 2,
                                         trackInPoster: (body[3] & 8) >> 3
                                     };
-                                    var trackID = ReadBig32(body, 12);
-                                    var _duration = ReadBig32(body, 20);
-                                    var group = ReadBig16(body, 34);
-                                    var trackWidth = parseFloat(ReadBig16(body, 72) + '.' + ReadBig16(body, 74));
-                                    var trackHeight = parseFloat(ReadBig16(body, 76) + '.' + ReadBig16(body, 78));
+                                    var boxOffset = _version == 1 ? 20 : 12;
+
+                                    var trackID = ReadBig32(body, boxOffset);
+                                    boxOffset += 4;
+                                    boxOffset += 4; //reserve
+                                    var _duration = _version == 1 ? ReadBig64(body, boxOffset) : ReadBig32(body, boxOffset);
+                                    boxOffset += _version == 1 ? 8 : 4;
+                                    boxOffset += 8; //reserve
+                                    boxOffset += 2; //layer
+                                    var group = ReadBig16(body, boxOffset);
+                                    boxOffset += 2;
+                                    boxOffset += 2 + 2 + 36; //volume reserve matrix
+                                    var trackWidth = parseFloat(ReadBig16(body, boxOffset) + '.' + ReadBig16(body, boxOffset + 2));
+                                    boxOffset += 4;
+                                    var trackHeight = parseFloat(ReadBig16(body, boxOffset) + '.' + ReadBig16(body, boxOffset + 2));
 
                                     parent[box.name] = {
                                         flags: flags,
@@ -6137,16 +6150,29 @@ var MP4Demuxer = function () {
                                     quality 2   22
                                     */
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 8, box.size - 8);
-                                    var _timeScale = ReadBig32(body, 12);
-                                    var _duration2 = ReadBig32(body, 16);
-                                    var language = ReadBig16(body, 20);
-                                    var quality = ReadBig16(body, 22);
-
+                                    var _version2 = body[0];
+                                    var _timeScale = 0;
+                                    var _duration2 = 0;
+                                    var language = 0;
+                                    var _boxOffset = 0;
+                                    if (_version2 == 1) {
+                                        _boxOffset = 20;
+                                        _timeScale = ReadBig32(body, _boxOffset);
+                                        _boxOffset += 4;
+                                        _duration2 = ReadBig64(body, _boxOffset);
+                                        _boxOffset += 8;
+                                    } else {
+                                        _boxOffset = 12;
+                                        _timeScale = ReadBig32(body, _boxOffset);
+                                        _boxOffset += 4;
+                                        _duration2 = ReadBig32(body, _boxOffset);
+                                        _boxOffset += 4;
+                                    }
+                                    language = ReadBig16(body, _boxOffset);
                                     parent[box.name] = {
                                         timeScale: _timeScale,
                                         duration: _duration2,
-                                        language: language,
-                                        quality: quality
+                                        language: language
                                     };
                                     break;
                                 }
@@ -6161,7 +6187,7 @@ var MP4Demuxer = function () {
                                 {
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 8, box.size - 8);
                                     var dataReferenceIndex = ReadBig32(body, 4);
-                                    var version = ReadBig16(body, 8);
+                                    var _version3 = ReadBig16(body, 8);
                                     var revisionLevel = ReadBig16(body, 10);
                                     var vendor = ReadBig32(body, 12);
                                     var temporalQuality = ReadBig32(body, 16);
@@ -6178,7 +6204,7 @@ var MP4Demuxer = function () {
 
                                     parent[box.name] = {
                                         dataReferenceIndex: dataReferenceIndex,
-                                        version: version,
+                                        version: _version3,
                                         revisionLevel: revisionLevel,
                                         vendor: vendor,
                                         temporalQuality: temporalQuality,
@@ -6208,13 +6234,13 @@ var MP4Demuxer = function () {
                                     var nb_nalus = body[5] & 0x1f;
                                     var SPS = new Array(nb_nalus);
                                     var recordLength = void 0;
-                                    var boxOffset = 6;
+                                    var _boxOffset2 = 6;
                                     for (var i = 0; i < nb_nalus; i++) {
-                                        recordLength = ReadBig16(body, offset);
-                                        boxOffset += 2;
-                                        SPS[i] = _spsParser2.default.parseSPS(new Uint8Array(data.buffer, data.byteOffset + index + offset + 8 + boxOffset, recordLength));
+                                        recordLength = ReadBig16(body, _boxOffset2);
+                                        _boxOffset2 += 2;
+                                        SPS[i] = _spsParser2.default.parseSPS(new Uint8Array(data.buffer, data.byteOffset + index + offset + 8 + _boxOffset2, recordLength));
                                         var codecString = 'avc1.';
-                                        var codecArray = body.subarray(boxOffset + 1, boxOffset + 4);
+                                        var codecArray = body.subarray(_boxOffset2 + 1, _boxOffset2 + 4);
                                         for (var j = 0; j < 3; j++) {
                                             var h = codecArray[j].toString(16);
                                             if (h.length < 2) {
@@ -6223,16 +6249,16 @@ var MP4Demuxer = function () {
                                             codecString += h;
                                         }
                                         SPS[i].codecString = codecString;
-                                        boxOffset += recordLength;
+                                        _boxOffset2 += recordLength;
                                     }
-                                    nb_nalus = body[boxOffset];
+                                    nb_nalus = body[_boxOffset2];
                                     var PPS = new Array(nb_nalus);
-                                    boxOffset++;
+                                    _boxOffset2++;
                                     for (var _i = 0; _i < nb_nalus; _i++) {
                                         recordLength = ReadBig16(body, offset);
-                                        boxOffset += 2;
+                                        _boxOffset2 += 2;
                                         //ignoring PPS
-                                        boxOffset += recordLength;
+                                        _boxOffset2 += recordLength;
                                     }
                                     parent[box.name] = {
                                         configurationVersion: configurationVersion,
@@ -6249,7 +6275,7 @@ var MP4Demuxer = function () {
                                 {
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 8, box.size - 8);
                                     var _dataReferenceIndex = ReadBig32(body, 4);
-                                    var _version = ReadBig16(body, 8);
+                                    var _version4 = ReadBig16(body, 8);
                                     var _revisionLevel = ReadBig16(body, 10);
                                     var _vendor = ReadBig32(body, 12);
                                     var channels = ReadBig16(body, 16);
@@ -6260,7 +6286,7 @@ var MP4Demuxer = function () {
                                     //unknown two bytes here???
                                     parent[box.name] = {
                                         dataReferenceIndex: _dataReferenceIndex,
-                                        version: _version,
+                                        version: _version4,
                                         revisionLevel: _revisionLevel,
                                         vendor: _vendor,
                                         channels: channels,
@@ -6286,31 +6312,37 @@ var MP4Demuxer = function () {
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 12, box.size - 12);
                                     var entryCount = ReadBig32(body, 0);
                                     var sampleTable = [];
-                                    var _boxOffset = 4;
+                                    var _boxOffset3 = 4;
                                     for (var _i2 = 0; _i2 < entryCount; _i2++) {
-                                        var sampleCount = ReadBig32(body, _boxOffset);
-                                        var sampleDuration = ReadBig32(body, _boxOffset + 4);
+                                        var sampleCount = ReadBig32(body, _boxOffset3);
+                                        var sampleDuration = ReadBig32(body, _boxOffset3 + 4);
                                         sampleTable.push({
                                             sampleCount: sampleCount, sampleDuration: sampleDuration
                                         });
-                                        _boxOffset += 8;
+                                        _boxOffset3 += 8;
                                     }
                                     parent[box.name] = sampleTable;
                                     break;
                                 }
                             case 'ctts':
                                 {
-                                    body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 12, box.size - 12);
-                                    var _entryCount = ReadBig32(body, 0);
+                                    body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 8, box.size - 8);
+                                    var _version5 = body[0];
+                                    var _entryCount = ReadBig32(body, 4);
                                     var _sampleTable = [];
-                                    var _boxOffset2 = 4;
+                                    var _boxOffset4 = 8;
                                     for (var _i3 = 0; _i3 < _entryCount; _i3++) {
-                                        var _sampleCount = ReadBig32(body, _boxOffset2);
-                                        var compositionOffset = ReadBig32(body, _boxOffset2 + 4);
+                                        var _sampleCount = ReadBig32(body, _boxOffset4);
+                                        //some files are buggy and declare version=0 while using signed offsets
+                                        var compositionOffset = ReadBig32(body, _boxOffset4 + 4);
+                                        if (compositionOffset >= 0x80000000) {
+                                            //this value may intend a signed offset
+                                            compositionOffset &= 0xffffffff;
+                                        }
                                         _sampleTable.push({
                                             sampleCount: _sampleCount, compositionOffset: compositionOffset
                                         });
-                                        _boxOffset2 += 8;
+                                        _boxOffset4 += 8;
                                     }
                                     parent[box.name] = _sampleTable;
                                     break;
@@ -6320,10 +6352,10 @@ var MP4Demuxer = function () {
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 12, box.size - 12);
                                     var _entryCount2 = ReadBig32(body, 0);
                                     var _sampleTable2 = [];
-                                    var _boxOffset3 = 4;
+                                    var _boxOffset5 = 4;
                                     for (var _i4 = 0; _i4 < _entryCount2; _i4++) {
-                                        _sampleTable2[_i4] = ReadBig32(body, _boxOffset3);
-                                        _boxOffset3 += 4;
+                                        _sampleTable2[_i4] = ReadBig32(body, _boxOffset5);
+                                        _boxOffset5 += 4;
                                     }
                                     parent[box.name] = _sampleTable2;
                                     break;
@@ -6333,15 +6365,15 @@ var MP4Demuxer = function () {
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 12, box.size - 12);
                                     var _entryCount3 = ReadBig32(body, 0);
                                     var _sampleTable3 = [];
-                                    var _boxOffset4 = 4;
+                                    var _boxOffset6 = 4;
                                     for (var _i5 = 0; _i5 < _entryCount3; _i5++) {
-                                        var firstChunk = ReadBig32(body, _boxOffset4);
-                                        var samplesPerChunk = ReadBig32(body, _boxOffset4 + 4);
-                                        var sampleDescID = ReadBig32(body, _boxOffset4 + 8);
+                                        var firstChunk = ReadBig32(body, _boxOffset6);
+                                        var samplesPerChunk = ReadBig32(body, _boxOffset6 + 4);
+                                        var sampleDescID = ReadBig32(body, _boxOffset6 + 8);
                                         _sampleTable3.push({
                                             firstChunk: firstChunk, samplesPerChunk: samplesPerChunk, sampleDescID: sampleDescID
                                         });
-                                        _boxOffset4 += 12;
+                                        _boxOffset6 += 12;
                                     }
                                     parent[box.name] = _sampleTable3;
                                     break;
@@ -6352,10 +6384,10 @@ var MP4Demuxer = function () {
                                     var _sampleSize = ReadBig32(body, 0);
                                     var _entryCount4 = ReadBig32(body, 4);
                                     var _sampleTable4 = [];
-                                    var _boxOffset5 = 8;
+                                    var _boxOffset7 = 8;
                                     for (var _i6 = 0; _i6 < _entryCount4; _i6++) {
-                                        _sampleTable4[_i6] = ReadBig32(body, _boxOffset5);
-                                        _boxOffset5 += 4;
+                                        _sampleTable4[_i6] = ReadBig32(body, _boxOffset7);
+                                        _boxOffset7 += 4;
                                     }
                                     parent[box.name] = {
                                         sampleSize: _sampleSize,
@@ -6368,10 +6400,10 @@ var MP4Demuxer = function () {
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 12, box.size - 12);
                                     var _entryCount5 = ReadBig32(body, 0);
                                     var _sampleTable5 = [];
-                                    var _boxOffset6 = 4;
+                                    var _boxOffset8 = 4;
                                     for (var _i7 = 0; _i7 < _entryCount5; _i7++) {
-                                        _sampleTable5[_i7] = ReadBig32(body, _boxOffset6);
-                                        _boxOffset6 += 4;
+                                        _sampleTable5[_i7] = ReadBig32(body, _boxOffset8);
+                                        _boxOffset8 += 4;
                                     }
                                     parent[box.name] = _sampleTable5;
                                     break;
@@ -6381,10 +6413,10 @@ var MP4Demuxer = function () {
                                     body = new Uint8Array(data.buffer, data.byteOffset + index + offset + 12, box.size - 12);
                                     var _entryCount6 = ReadBig32(body, 0);
                                     var _sampleTable6 = new Float64Array(_entryCount6);
-                                    var _boxOffset7 = 4;
+                                    var _boxOffset9 = 4;
                                     for (var _i8 = 0; _i8 < _entryCount6; _i8++) {
-                                        _sampleTable6[_i8] = ReadBig64(body, _boxOffset7);
-                                        _boxOffset7 += 8;
+                                        _sampleTable6[_i8] = ReadBig64(body, _boxOffset9);
+                                        _boxOffset9 += 8;
                                     }
                                     parent['stco'] = _sampleTable6;
                                     break;
