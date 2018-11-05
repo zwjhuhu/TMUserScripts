@@ -5833,6 +5833,10 @@ var _mediaInfo2 = _interopRequireDefault(_mediaInfo);
 
 var _exception = _dereq_('../utils/exception.js');
 
+var _browser = _dereq_('../utils/browser.js');
+
+var _browser2 = _interopRequireDefault(_browser);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -6481,6 +6485,9 @@ var MP4Demuxer = function () {
             var codecs = [];
             var id = 1;
             var accurateDuration = [0];
+            var keyframesIndex = { times: [], filepositions: [], chunkOffsets: [], pts: [], dts: [] };
+            var videoTimeScale = 0;
+            var audioTimeScale = 0;
             if (mediaInfo.hasVideo) {
                 var sps = tracks.video.mdia[0].minf[0].stbl[0].stsd[0].avc1.extensions.avcC.SPS[0];
                 mediaInfo.videoCodec = sps.codecString;
@@ -6528,7 +6535,6 @@ var MP4Demuxer = function () {
                 var sampleToChunkOffset = 0;
                 var chunkNumber = 1;
                 sampleNumber = 0;
-                var keyframesIndex = { times: [], filepositions: [] };
                 chunkMap.video = [];
                 for (var _i10 = 0; _i10 < stco.length; _i10++) {
                     if (nextChunkRule != undefined && chunkNumber >= nextChunkRule.firstChunk) {
@@ -6564,13 +6570,17 @@ var MP4Demuxer = function () {
                         });
 
                         if (isKeyframe) {
-                            // when seek use keyframes player's currentTime may not exactly equal to keyframe sample's pts
-                            // cause player.currentTime < player.buffered.start(0) playing will stuck until seek to buffered position manually
-                            // so add some delay to skip it,may seek to some position after this keyframe but it could continue playing
-                            var decodeDelta = 10 * duration;
-                            var milliseconds = this._timestampBase + (ts + cts + decodeDelta) / timeScale * 1e3;
-                            keyframesIndex.times.push(milliseconds);
+                            // sync point(video key frame) here is just give a video sample's file offset
+                            // but the first audio frame after this file offset may have have a pts/dts bigger than this video frame
+                            // in this case mediaElement's buffed start time will equal the first audio frame's pts/dts
+                            // (Chrome/Edge use dts Firefox/Safari use pts) seek to video frame's pts or dts may cause video stuck
+                            // becasuse no audio data could be rendered at this time so try sync seek time to the first audio's pts/dts
+                            // here just save dts pts chunkOffset for search in sync proccess later
+                            // The case may cause by the file was encoded without gop setting
+                            keyframesIndex.pts.push(ts + cts);
+                            keyframesIndex.dts.push(ts);
                             keyframesIndex.filepositions.push(currentChunk.offset + sampleOffset);
+                            keyframesIndex.chunkOffsets.push(currentChunk.offset);
                         }
                         sampleOffset += _size;
                     }
@@ -6640,6 +6650,7 @@ var MP4Demuxer = function () {
                     meta.duration = newDuration;
                     timeScale = newTimeScale;
                 }
+                videoTimeScale = timeScale;
                 meta.timescale = timeScale;
                 meta.frameRate = sps.frame_rate;
                 meta.id = id++;
@@ -6726,6 +6737,7 @@ var MP4Demuxer = function () {
                 _meta.duration = Math.floor(this._duration / 1e3 * _timeScale2);
                 _meta.id = id++;
                 _meta.refSampleDuration = 1024 / _meta.audioSampleRate * _timeScale2;
+                audioTimeScale = _timeScale2;
                 _meta.timescale = _timeScale2;
                 this._onTrackMetadata('audio', _meta);
                 this._audioInitialMetadataDispatched = true;
@@ -6755,7 +6767,16 @@ var MP4Demuxer = function () {
                 mergedChunkMap = mergedChunkMap.concat(chunkMap.audio);
             }
             mergedChunkMap = mergedChunkMap.sort(function (a, b) {
-                return a.offset - b.offset;
+                var ret = a.offset - b.offset;
+                if (ret === 0) {
+                    //make sure video samples before audio samples
+                    if (a.type === 'video') {
+                        ret = -1;
+                    } else {
+                        ret = 1;
+                    }
+                }
+                return ret;
             });
             //find media data end position
             if (mergedChunkMap.length > 0) {
@@ -6765,9 +6786,79 @@ var MP4Demuxer = function () {
                 }, 0);
             }
             this._chunkMap = mergedChunkMap;
+            //sync seek position's timeoffset
+            this._syncKeyFramesTimeOffset(keyframesIndex, videoTimeScale, audioTimeScale);
+
             this._mediaInfo = mediaInfo;
             if (mediaInfo.isComplete()) this._onMediaInfo(mediaInfo);
             _logger2.default.v(this.TAG, 'Parsed moov box, hasVideo: ' + mediaInfo.hasVideo + ' hasAudio: ' + mediaInfo.hasAudio + ', accurate duration: ' + mediaInfo.accurateDuration);
+        }
+    }, {
+        key: '_syncKeyFramesTimeOffset',
+        value: function _syncKeyFramesTimeOffset(keyframesIndex, videoTimeScale, audioTimeScale) {
+            if (!this._hasVideo || !keyframesIndex) {
+                return;
+            }
+            var usePts = _browser2.default.firefox || _browser2.default.safari;
+            if (this._hasAudio) {
+                for (var i = 0, len = keyframesIndex.chunkOffsets.length, mapLen = this._chunkMap.length, j = 0; i < len; i++) {
+                    var chunkOffset = keyframesIndex.chunkOffsets[i];
+                    var dataChunk = null;
+                    var nextChunk = null;
+                    var chunkType = null;
+                    var refPts = null;
+                    var refDts = null;
+                    var nextPts = null;
+                    var nextDts = null;
+
+                    while (chunkOffset !== this._chunkMap[j].offset && j < mapLen) {
+                        j++;
+                    }
+                    if (j >= mapLen) {
+                        break;
+                    }
+
+                    dataChunk = this._chunkMap[j];
+                    chunkType = dataChunk.type;
+                    refPts = keyframesIndex.pts[i];
+                    refDts = keyframesIndex.dts[i];
+                    var nextj = j + 1;
+                    while (nextChunk === null && nextj < mapLen) {
+                        nextChunk = this._chunkMap[nextj];
+                        if (nextChunk.type === chunkType) {
+                            nextChunk = null;
+                            nextj++;
+                        }
+                    }
+                    if (!nextChunk) {
+                        break; //last chunk
+                    }
+                    //for now it must be audio samples so just use sample 0
+                    nextPts = nextChunk.samples[0].ts + (nextChunk.samples[0].cts ? nextChunk.samples[0].cts : 0);
+                    nextDts = nextChunk.samples[0].ts;
+                    if (refPts / videoTimeScale < nextPts / audioTimeScale) {
+                        keyframesIndex.pts[i] = nextPts * videoTimeScale / audioTimeScale;
+                    }
+                    if (refDts / videoTimeScale < nextDts / audioTimeScale) {
+                        keyframesIndex.dts[i] = nextDts * videoTimeScale / audioTimeScale;
+                    }
+                }
+            }
+
+            var kind = 'dts';
+            if (usePts) {
+                kind = 'pts';
+            }
+            for (var _i14 = 0, _len = keyframesIndex[kind].length; _i14 < _len; _i14++) {
+                keyframesIndex.times[_i14] = keyframesIndex[kind][_i14];
+            }
+            var timeScale = keyframesIndex.timeScale;
+            for (var _i15 = 0, _len2 = keyframesIndex.times.length; _i15 < _len2; _i15++) {
+                keyframesIndex.times[_i15] = this._timestampBase + Math.ceil(keyframesIndex.times[_i15] * 1e3 / videoTimeScale);
+            }
+            delete keyframesIndex.dts;
+            delete keyframesIndex.pts;
+            delete keyframesIndex.chunkOffsets;
         }
     }, {
         key: 'bindDataSource',
@@ -7190,7 +7281,7 @@ var MP4Demuxer = function () {
 
 exports.default = MP4Demuxer;
 
-},{"../core/media-info.js":7,"../utils/exception.js":42,"../utils/logger.js":43,"./demux-errors.js":16,"./sps-parser.js":20}],20:[function(_dereq_,module,exports){
+},{"../core/media-info.js":7,"../utils/browser.js":41,"../utils/exception.js":42,"../utils/logger.js":43,"./demux-errors.js":16,"./sps-parser.js":20}],20:[function(_dereq_,module,exports){
 'use strict';
 
 Object.defineProperty(exports, "__esModule", {
