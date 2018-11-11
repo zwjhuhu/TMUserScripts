@@ -78,6 +78,23 @@ let fetch = function(url, options) {
     });
 };
 
+//config tune
+let _flvConfig = {
+    seekType: 'range',
+    reuseRedirectedURL: true,
+    fixAudioTimestampGap: false,
+    headers: {
+        'Referer': window.location.href,
+        'User-Agent': window.navigator.userAgent
+    }
+};
+
+let _hlsConfig = {
+    enableWorker: true,
+    maxMaxBufferLength:180
+};
+
+
 function createPopup(param) {
     if (!param.content)
         return;
@@ -501,15 +518,7 @@ let flvparam = function(select) {
     createPlayer({
         detail: {
             src: srcUrl[select],
-            option: {
-                seekType: 'range',
-                reuseRedirectedURL: true,
-                fixAudioTimestampGap: false,
-                headers: {
-                    'Referer': window.location.href,
-                    'User-Agent': window.navigator.userAgent
-                }
-            }
+            option: _flvConfig
         }
     });
     if (srcUrl[select].partial) {
@@ -850,7 +859,7 @@ function sourceTypeRoute(data) {
                         )).join('');
                         let masterManifestBlob = new Blob([masterManifest], { mimeType: 'application/vnd.apple.mpegurl' });
                         let masterManifestUrl = URL.createObjectURL(masterManifestBlob);
-                        window.hlsplayer = new Hls({enableWorker: false});
+                        window.hlsplayer = new Hls(_hlsConfig);
                         hlsplayer.loadSource(masterManifestUrl);
                         hlsplayer.attachMedia(abpinst.video);
                         hlsplayer.once(Hls.Events.MANIFEST_PARSED, () => URL.revokeObjectURL(masterManifestUrl));
