@@ -62,7 +62,7 @@ function saveStorage(save) {
         save = lastSaved;
     }
     localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(save));
-    
+
 }
 
 function getCookie(name) {
@@ -534,9 +534,30 @@ let _t = function(s) {
         },
         "copied": {
             "message": "已复制"
+        },
+        "Auto": {
+            "message": "自动"
+        },
+        "switchingTo": {
+            "message": "正在切换至 "
+        },
+        "switched": {
+            "message": "已切换"
+        },
+        "currentQuality": {
+            "message": "当前清晰度："
+        },
+        "currentFragment": {
+            "message": "当前分片："
+        },
+        "playerCoreSetting": {
+            "message": "播放器核心："
+        },
+        "playerCoreSettingTip": {
+            "message": "切换后需刷新页面"
         }
     };
 
-    return msgs[s].message;
+    return msgs[s] ? msgs[s].message : s;
 
 };

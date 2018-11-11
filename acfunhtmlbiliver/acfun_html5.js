@@ -13,7 +13,9 @@
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/md5.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/x2js.min.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/flv.min.js
-// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/jquery-3.3.1.min.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/hls.tmac.min.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/flv.min.js
+// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/hlsjsMediaInfo.min.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/google-style-loading.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/CommentCoreLibrary.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/biliplus_shield.js
@@ -24,7 +26,6 @@
 // @grant        GM_xmlhttpRequest
 // @connect      *
 // ==/UserScript==
-
 
 //保存原来的fetch,因为有跨域的问题所有fetch转换为GM_xmlhttpRequest
 let orginFetch = window.fetch;
@@ -139,6 +140,10 @@ window.currentSrc = '';
 window.currentLang = '';
 let firstTime = true;
 let highestType;
+let coreMode = 'hls';
+readStorage('coreMode', function (item) {
+    coreMode = item.coreMode || 'hls';
+});
 
 function response2url(json) {
     let data = {};
@@ -367,6 +372,14 @@ function fetchSrcThen(json) {
 }
 
 window.changeSrc = function(e, t, force) {
+    if (coreMode == 'hls') {
+        hlsplayer.nextLevel = t;
+        abpinst.createPopup(_t('switchingTo') + e.target.value, 3e3);
+        t != -1 && hlsplayer.once(Hls.Events.LEVEL_SWITCHED, () => {
+            abpinst.createPopup(_t('switched'), 2e3);
+        })
+        return;
+    }
     let div = abpinst.playerUnit.querySelector('#info-box');
     if ((abpinst == undefined || (currentSrc == t)) && !force)
         return false;
@@ -408,6 +421,11 @@ let createPlayer = function(e) {
         window.flvplayer.destroy();
         delete window.flvplayer;
     }
+    if (window.hlsplayer != undefined) {
+        window.hlsplayer.stopLoad();
+        window.hlsplayer.destroy();
+        delete window.hlsplayer;
+    }
     if (e.detail == null)
         return false;
     window.flvplayer = flvjs.createPlayer(e.detail.src, e.detail.option);
@@ -421,6 +439,11 @@ window.addEventListener('beforeunload', function() {
         window.flvplayer.unload();
         window.flvplayer.destroy();
         delete window.flvplayer;
+    }
+    if (window.hlsplayer != undefined) {
+        window.hlsplayer.stopLoad();
+        window.hlsplayer.destroy();
+        delete window.hlsplayer;
     }
 })
 let load_fail = function(type, info, detail) {
@@ -482,8 +505,6 @@ let flvparam = function(select) {
                 seekType: 'range',
                 reuseRedirectedURL: true,
                 fixAudioTimestampGap: false,
-                customLoader: true,
-                tmfunc: GM_xmlhttpRequest,
                 headers: {
                     'Referer': window.location.href,
                     'User-Agent': window.navigator.userAgent
@@ -644,6 +665,17 @@ function init() {
             thick: 4
         });
         dots.runTimer();
+
+        // 播放核心设置
+        abpinst.settingPanel.firstChild.lastChild.appendChild(_('p', { className: 'label prop' }, [
+            _('text', _t('playerCoreSetting')),
+            _('select', { id: 'setting-playerCore', event: { mouseup: function (e) { e.stopPropagation(); }, change: function () { saveStorage({ coreMode: this.value }); } } }, [
+                _('option', { value: 'hls' }, [_('text', 'hls.js / hls')]),
+                _('option', { value: 'flv' }, [_('text', 'flv.js / mp4')])
+            ]), _('br'),
+            _('span', { style: { fontSize: '11px' } }, [_('text', _t('playerCoreSettingTip'))])
+        ]));
+        abpinst.settingPanel.querySelector('#setting-playerCore').value = coreMode;
 
         fetch('http://www.acfun.cn/video/getVideo.aspx?id=' + pageInfo.vid, {
                 method: 'GET',
@@ -808,7 +840,43 @@ function sourceTypeRoute(data) {
                         });
                     }
                     let decrypted = JSON.parse(rc4(rc4_key, atob(data.data)));
-                    fetchSrcThen(decrypted);
+                    if (coreMode == 'flv') {
+                        fetchSrcThen(decrypted);
+                    } else if (coreMode == 'hls') {
+                        let playlists = decrypted.stream.filter(i => i.m3u8 !== undefined);
+                        playlists.sort((a, b) => a.width - b.width);
+                        let masterManifest = '#EXTM3U\n' + playlists.map(i => (
+                            `#EXT-X-STREAM-INF:BANDWIDTH=${Math.round(i.total_size / i.duration * 8)},RESOLUTION=${i.width}x${i.height}\n${i.m3u8}\n`
+                        )).join('');
+                        let masterManifestBlob = new Blob([masterManifest], { mimeType: 'application/vnd.apple.mpegurl' });
+                        let masterManifestUrl = URL.createObjectURL(masterManifestBlob);
+                        window.hlsplayer = new Hls({enableWorker: false});
+                        hlsplayer.loadSource(masterManifestUrl);
+                        hlsplayer.attachMedia(abpinst.video);
+                        hlsplayer.once(Hls.Events.MANIFEST_PARSED, () => URL.revokeObjectURL(masterManifestUrl));
+                        hlsplayer.on(Hls.Events.ERROR, function (n, d) {console.log(n, d)});
+                        HlsjsMediaInfoModule.observeMediaInfo(hlsplayer);
+                        abpinst.playerUnit.querySelector('.BiliPlus-Scale-Menu .Video-Defination').appendChild(_('div', {
+                            changeto: JSON.stringify([-1, _t('Auto')]),
+                            name: _t('Auto'),
+                            className: 'on'
+                        }, [_('text', _t('Auto'))]));
+                        hlsplayer.levelName = playlists.map(i => {
+                            let name = {
+                                'm3u8_flv': _t('flvhd'),
+                                'm3u8_mp4': _t('mp4hd'),
+                                'm3u8_hd': _t('mp4hd2'),
+                                'm3u8_hd3': _t('mp4hd3')
+                            }[i.stream_type];
+                            abpinst.playerUnit.querySelector('.BiliPlus-Scale-Menu .Video-Defination').appendChild(_('div', {
+                                changeto: JSON.stringify([playlists.indexOf(i), name]),
+                                name: name
+                            }, [_('text', name)]));
+                            return name;
+                        });
+                        abpinst.playerUnit.querySelector('.BiliPlus-Scale-Menu').style.width = playlists.length > 3 ? (((playlists.length + 1) * 50) + 'px') : ''
+                        //hlsplayer.on('hlsMIStatPercentage', function(n, d) { console.log(n, d); });
+                    }
                     // 缩略图服务
                     (function getThumbs() {
                         fetch('https://acfun-thumbs.s2.dogecdn.com/?videoId=' + pageInfo.vid, {
