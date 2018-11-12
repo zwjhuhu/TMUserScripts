@@ -14,7 +14,6 @@
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/x2js.min.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/flv.min.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/hls.tmac.min.js
-// @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/flv.min.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/hlsjsMediaInfo.min.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/google-style-loading.js
 // @require      https://raw.githubusercontent.com/zwjhuhu/TMUserScripts/master/acfunhtmlbiliver/CommentCoreLibrary.js
@@ -91,7 +90,7 @@ let _flvConfig = {
 
 let _hlsConfig = {
     enableWorker: true,
-    maxMaxBufferLength:180
+    maxMaxBufferLength:60
 };
 
 
@@ -388,13 +387,12 @@ function fetchSrcThen(json) {
     firstTime = false;
 }
 
+let hlsPending = -1;
 window.changeSrc = function(e, t, force) {
     if (coreMode == 'hls') {
         hlsplayer.nextLevel = t;
         abpinst.createPopup(_t('switchingTo') + e.target.value, 3e3);
-        t != -1 && hlsplayer.once(Hls.Events.LEVEL_SWITCHED, () => {
-            abpinst.createPopup(_t('switched'), 2e3);
-        })
+        hlsPending = t;
         return;
     }
     let div = abpinst.playerUnit.querySelector('#info-box');
@@ -859,11 +857,24 @@ function sourceTypeRoute(data) {
                         )).join('');
                         let masterManifestBlob = new Blob([masterManifest], { mimeType: 'application/vnd.apple.mpegurl' });
                         let masterManifestUrl = URL.createObjectURL(masterManifestBlob);
+                        if (localStorage.AHP_HLS_AUTOLEVEL) {
+                            _hlsConfig.startLevel = localStorage.AHP_HLS_AUTOLEVEL;
+                        }
                         window.hlsplayer = new Hls(_hlsConfig);
                         hlsplayer.loadSource(masterManifestUrl);
                         hlsplayer.attachMedia(abpinst.video);
                         hlsplayer.once(Hls.Events.MANIFEST_PARSED, () => URL.revokeObjectURL(masterManifestUrl));
-                        hlsplayer.on(Hls.Events.ERROR, function (n, d) {console.log(n, d)});
+                        hlsplayer.on(Hls.Events.LEVEL_SWITCHING, (n, d) => {
+                            localStorage.AHP_HLS_AUTOLEVEL = d.level;
+                        });
+                        hlsplayer.on(Hls.Events.LEVEL_SWITCHED, () => {
+                            if (hlsPending != -1) {
+                                abpinst.createPopup(_t('switched') + ' ' + (hlsplayer.levelName[hlsPending] || hlsPending), 2e3);
+                                hlsPending = -1;
+                            }
+                        });
+                        hlsplayer.on(Hls.Events.ERROR, function (n, d) { console.log(n, d) });
+
                         HlsjsMediaInfoModule.observeMediaInfo(hlsplayer);
                         abpinst.playerUnit.querySelector('.BiliPlus-Scale-Menu .Video-Defination').appendChild(_('div', {
                             changeto: JSON.stringify([-1, _t('Auto')]),
