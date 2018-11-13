@@ -29,6 +29,10 @@ function scriptSource(invokeBy) {
     const util_error = util_log_impl('error');
     const log = util_log;
 
+    // 检查是不是能在loading状态执行,如果不行就不能注入xhr和jQuery
+    const init_injectable = window.document.readyState === 'loading';
+    log('init run-at ', init_injectable);
+
     // 保存原始的localStorage防止被页面上的脚本修改
     const mystorage = window.localStorage;
 
@@ -38,7 +42,7 @@ function scriptSource(invokeBy) {
 
     const _config = {
         server: {
-            S0: 'https://biliplus.ipcjs.win',
+            S0: 'https://biliplus.ipcjs.top',
             S1: 'https://www.biliplus.com',
             defaultServer: function() {
                 return this.S0;
@@ -107,9 +111,9 @@ function scriptSource(invokeBy) {
             return dcl
         }
 
-        if (window.document.readyState !== 'loading') {
-            throw new Error('unit_init must run at loading, current is ' + document.readyState)
-        }
+        //if (window.document.readyState !== 'loading') {
+        //    throw new Error('unit_init must run at loading, current is ' + document.readyState)
+        //}
 
         window.document.addEventListener('DOMContentLoaded', dclCreator(RUN_AT.DOM_LOADED))
         window.addEventListener('DOMContentLoaded', dclCreator(RUN_AT.DOM_LOADED_AFTER))
@@ -233,14 +237,14 @@ function scriptSource(invokeBy) {
 
     const balh_config = (function() {
         let saved = util_storage.balh_config;
-        if(!saved) {
+        //if(!saved) {
             saved = {
                 server: r.server.defaultServer(),
                 blocked_vip: false,
                 enable_in_av: true
             };
             util_storage.balh_config = saved;
-        }
+        //}
         return saved;
     }());
 
@@ -1236,8 +1240,9 @@ function scriptSource(invokeBy) {
                 _playurl: playurl,
             };
         })();
-
-        injectXHR();
+        if (init_injectable) {
+            injectXHR();
+        }
 
         function checkAreaLimitInfo() {
             let checkLimitTimer = null;
@@ -1253,12 +1258,7 @@ function scriptSource(invokeBy) {
                         let season_id = getSeasonId();
                         util_storage.set('balh_season_' + season_id, cid);
                         biliplayurl(cid, { season_type: 1, quality: 80 }).then(function(url) {
-                            // 这里是故意转向injectAjax
-                            $.ajax({
-                                url: url,
-                                success: util_flvplayer.createFlvplayerWithUrls,
-                                error: util_func_noop
-                            });
+                            bilibiliApis._playurl.asyncAjax(url).then(json => util_flvplayer.createFlvplayerWithUrls(json));
                         });
                         done = true;
                     }
@@ -1288,9 +1288,63 @@ function scriptSource(invokeBy) {
                 }
             });
         } else {
-            injectAjax();
+            if (init_injectable) {
+                injectAjax();
+            }
             checkAreaLimitInfo();
         }
+
+        const balh_feature_RedirectToBangumi = (function() {
+            // 重定向到Bangumi页面
+            function tryRedirectToBangumi() {
+                let $errorPanel;
+                if (!($errorPanel = document.querySelector('.error-container > .error-panel'))) {
+                    return;
+                }
+                let msg = document.createElement('a');
+                $errorPanel.insertBefore(msg, $errorPanel.firstChild);
+                msg.innerText = '获取番剧页Url中...';
+                let aid = location.pathname.replace(/.*av(\d+).*/, '$1'),
+                    page = (location.pathname.match(/\/index_(\d+).html/) || ['', '1'])[1],
+                    cid,
+                    season_id,
+                    episode_id;
+                let avData;
+                balh_api_plus_view(aid)
+                    .then(function(data) {
+                    avData = data;
+                    if (data.code) {
+                        return Promise.reject(JSON.stringify(data));
+                    }
+                    // 计算当前页面的cid
+                    for (let i = 0; i < data.list.length; i++) {
+                        if (data.list[i].page == page) {
+                            cid = data.list[i].cid;
+                            break;
+                        }
+                    }
+                    if(!cid){
+                        return Promise.reject('cid is missing' + JSON.stringify(data));
+                    }
+                    // 有cid直接生成播放器
+                    biliplayurl(cid, { season_type: 1, quality: 80 }).then(function(url) {
+                        bilibiliApis._playurl.asyncAjax(url).then(json => util_flvplayer.createFlvplayerWithUrls(json));
+                    });
+
+                })
+                    .catch(function(e) {
+                    log('error:', arguments);
+                    msg.innerText = 'error:' + e;
+                });
+            }
+
+            util_init(() => {
+                if (util_page.av()) {
+                    tryRedirectToBangumi();
+                }
+            }, util_init.PRIORITY.DEFAULT, util_init.RUN_AT.COMPLETE);
+            return true // 随便返回一个值...
+        }());
 
     }());
 
@@ -1325,63 +1379,6 @@ function scriptSource(invokeBy) {
         };
         pingLoop();
     };
-
-    const balh_feature_RedirectToBangumi = (function() {
-        // 重定向到Bangumi页面
-        function tryRedirectToBangumi() {
-            let $errorPanel;
-            if (!($errorPanel = document.querySelector('.error-container > .error-panel'))) {
-                return;
-            }
-            let msg = document.createElement('a');
-            $errorPanel.insertBefore(msg, $errorPanel.firstChild);
-            msg.innerText = '获取番剧页Url中...';
-            let aid = location.pathname.replace(/.*av(\d+).*/, '$1'),
-                page = (location.pathname.match(/\/index_(\d+).html/) || ['', '1'])[1],
-                cid,
-                season_id,
-                episode_id;
-            let avData;
-            balh_api_plus_view(aid)
-                .then(function(data) {
-                avData = data;
-                if (data.code) {
-                    return Promise.reject(JSON.stringify(data));
-                }
-                // 计算当前页面的cid
-                for (let i = 0; i < data.list.length; i++) {
-                    if (data.list[i].page == page) {
-                        cid = data.list[i].cid;
-                        break;
-                    }
-                }
-                if(!cid){
-                    return Promise.reject('cid is missing' + JSON.stringify(data));
-                }
-                // 有cid直接生成播放器
-                biliplayurl(cid, { season_type: 1, quality: 80 }).then(function(url) {
-                    // 这里是故意转向injectAjax
-                    $.ajax({
-                        url: url,
-                        success: util_flvplayer.createFlvplayerWithUrls,
-                        error: util_func_noop
-                    });
-                });
-
-            })
-                .catch(function(e) {
-                log('error:', arguments);
-                msg.innerText = 'error:' + e;
-            });
-        }
-
-        util_init(() => {
-            if (util_page.av()) {
-                tryRedirectToBangumi();
-            }
-        }, util_init.PRIORITY.DEFAULT, util_init.RUN_AT.COMPLETE);
-        return true // 随便返回一个值...
-    }());
 
     // 暴露接口
     window.bangumi_area_limit_hack = {
