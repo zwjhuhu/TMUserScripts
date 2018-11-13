@@ -1922,7 +1922,7 @@ ABP.Strings = new Proxy({}, {
                         v = parseFloat(v);
                         if (isNaN(v)) return null;
                         currentVolume = v;
-                        !muted && (gainNode.gain.value = v);
+                        !muted && gainNode && (gainNode.gain.value = v);
                     }
                 });
                 Object.defineProperty(ABPInst.video, 'muted', {
@@ -1930,9 +1930,10 @@ ABP.Strings = new Proxy({}, {
                         return muted;
                     },
                     set: function(v) {
-                        if ( v !== true && v !== false) return null;
+                        if ( v !== true && v !== false)
+                            return ;
                         muted = v;
-                        gainNode.gain.value = muted ? 0 : currentVolume;
+                        gainNode && (gainNode.gain.value = muted ? 0 : currentVolume);
                     }
                 });
             } catch (e) { }
