@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         acfunhtml5tmver
 // @namespace    https://github.com/
-// @version      1.0.0
+// @version      1.6.1
 // @description  插件的油猴版本,需要修改flv.js源码;
 // @author       zwj
 // @supportURL   https://github.com/zwjhuhu/TMUserScripts/issues

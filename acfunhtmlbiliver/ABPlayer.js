@@ -1887,23 +1887,33 @@ ABP.Strings = new Proxy({}, {
         if (isChrome)
         (function () {
             try {
-                var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                // 移动设备处理
-                if (audioCtx.state == 'suspended')
-                window.addEventListener('touchstart', function temp() {
-                    audioCtx.resume();
-                    window.removeEventListener('touchstart', temp);
-                }), window.addEventListener('mousemove', function temp() {
-                    audioCtx.resume();
-                    window.removeEventListener('mousemove', temp);
-                });
-                var gainNode = audioCtx.createGain();4
-                var source = audioCtx.createMediaElementSource(ABPInst.video);
-                source.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-
                 var currentVolume = 1;
                 var muted = false;
+                var audioCtx,gainNode,source;
+                ABPInst.video.addEventListener('click',function resumeAudioCtx(){
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    gainNode = audioCtx.createGain();
+                    source = audioCtx.createMediaElementSource(ABPInst.video);
+                    source.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+                    ABPInst.video.removeEventListener('click', resumeAudioCtx);
+                });
+
+                // 移动设备处理
+                window.addEventListener('touchstart', function temp() {
+                    if (audioCtx && audioCtx.state == 'suspended'){
+                        audioCtx.resume();
+                    }
+                    window.removeEventListener('touchstart', temp);
+                }), window.addEventListener('mousemove', function temp() {
+                    if (audioCtx && audioCtx.state == 'suspended'){
+                        audioCtx.resume();
+                    }
+                    window.removeEventListener('mousemove', temp);
+                });
+
+
+
                 Object.defineProperty(ABPInst.video, 'volume', {
                     get: function() {
                         return currentVolume;
@@ -1913,7 +1923,6 @@ ABP.Strings = new Proxy({}, {
                         if (isNaN(v)) return null;
                         currentVolume = v;
                         !muted && (gainNode.gain.value = v);
-                        return currentVolume;
                     }
                 });
                 Object.defineProperty(ABPInst.video, 'muted', {
@@ -1924,7 +1933,6 @@ ABP.Strings = new Proxy({}, {
                         if ( v !== true && v !== false) return null;
                         muted = v;
                         gainNode.gain.value = muted ? 0 : currentVolume;
-                        return muted;
                     }
                 });
             } catch (e) { }
