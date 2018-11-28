@@ -845,14 +845,15 @@ var CommentManager = (function() {
 		this.startTimer = function(){
 			if(__timer > 0)
 				return;
-			var lastTPos = new Date().getTime();
+			var lastTPos = Date.now();
 			var cmMgr = this;
+            var tick = 17;
 			__timer = window.setInterval(function(){
-				var elapsed = new Date().getTime() - lastTPos;
-				lastTPos = new Date().getTime();
-				cmMgr.onTimerEvent(elapsed,cmMgr);
-				cmMgr.sendQueueLoader();
-			},1e3/60);
+                var elapsed = Date.now() - lastTPos;
+                lastTPos = Date.now();
+                cmMgr.onTimerEvent(elapsed,cmMgr);
+                cmMgr.sendQueueLoader();
+			},tick);
 			this.paused = false;
 			this.pausedTime = Date.now() - pauseTime;
 		};
